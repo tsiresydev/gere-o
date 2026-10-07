@@ -1,0 +1,7 @@
+export enum LeaveTransactionType {
+  INIT = 'INIT',
+  ACCRUAL = 'ACCRUAL',
+  LEAVE_TAKEN = 'LEAVE_TAKEN',
+  LEAVE_RELEASED = 'LEAVE_RELEASED',
+  DECISION = 'DECISION',
+}

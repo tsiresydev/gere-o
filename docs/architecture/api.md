@@ -14,6 +14,9 @@ L'autorisation est gérée par rôle (`EMPLOYEE`, `MANAGER`, `ADMIN`). Les endpo
 
 ## Work Days — Gestion du temps
 
+> **État Sprint 2** : CRUD + calculs + résumé quotidien implémentés.
+> Les résumés hebdomadaire/mensuel et les filtres de liste sont prévus au **Sprint 3**.
+
 ### Routes
 
 ```
@@ -32,34 +35,39 @@ GET    /api/work-days/summary/monthly
 
 #### `GET /api/work-days`
 
-Liste les journées de travail de l'utilisateur connecté.
+Liste les journées de travail de l'utilisateur connecté, de la plus récente à la plus ancienne. Réponse **paginée**.
 
 **Paramètres de query** (optionnels) :
-- `startDate` (date ISO)
-- `endDate` (date ISO)
-- `page` (nombre)
-- `limit` (nombre)
+- `startDate` (date ISO, borne inférieure)
+- `endDate` (date ISO, borne supérieure)
+- `page` (nombre, défaut : 1)
+- `limit` (nombre, défaut : 20, max : 100)
 
 **Réponse** :
 
 ```json
-[
-  {
-    "id": "uuid",
-    "userId": "uuid",
-    "date": "2026-10-06",
-    "entryTime": "08:45",
-    "breakStart": "13:00",
-    "breakEnd": "14:00",
-    "exitTime": "17:45",
-    "expectedMinutes": 480,
-    "workedMinutes": 480,
-    "balanceMinutes": 0,
-    "status": "COMPLETED",
-    "createdAt": "2026-10-06T08:45:00.000Z",
-    "updatedAt": "2026-10-06T17:45:00.000Z"
-  }
-]
+{
+  "items": [
+    {
+      "id": "uuid",
+      "userId": "uuid",
+      "date": "2026-10-06",
+      "entryTime": "08:45",
+      "breakStart": "13:00",
+      "breakEnd": "14:00",
+      "exitTime": "17:45",
+      "expectedMinutes": 480,
+      "workedMinutes": 480,
+      "balanceMinutes": 0,
+      "status": "COMPLETED",
+      "createdAt": "2026-10-06T08:45:00.000Z",
+      "updatedAt": "2026-10-06T17:45:00.000Z"
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 20
+}
 ```
 
 #### `POST /api/work-days`
@@ -129,10 +137,10 @@ Récupère le résumé quotidien.
 
 #### `GET /api/work-days/summary/weekly`
 
-Récupère le résumé hebdomadaire.
+Récupère le résumé hebdomadaire. Totalise les journées **terminées** (`COMPLETED`) du lundi au dimanche de la semaine contenant `weekStart`.
 
 **Paramètres de query** :
-- `weekStart` (date ISO du lundi)
+- `weekStart` (date ISO, défaut : semaine courante) — une date quelconque de la semaine, normalisée vers le **lundi** de celle-ci
 
 **Réponse** :
 
@@ -147,21 +155,21 @@ Récupère le résumé hebdomadaire.
 
 #### `GET /api/work-days/summary/monthly`
 
-Récupère le résumé mensuel.
+Récupère le résumé mensuel. Totalise les journées **terminées** (`COMPLETED`) du mois. L'objectif correspond aux **jours ouvrés** du mois (lundi → vendredi) × 480 min ; les jours fériés ne sont pas déduits.
 
 **Paramètres de query** :
-- `year` (nombre)
-- `month` (nombre, 1-12)
+- `year` (nombre, défaut : année courante)
+- `month` (nombre 1-12, défaut : mois courant)
 
-**Réponse** :
+**Réponse** (octobre 2026 = 22 jours ouvrés) :
 
 ```json
 {
   "year": 2026,
   "month": 10,
-  "expectedMinutes": 9600,
+  "expectedMinutes": 10560,
   "workedMinutes": 9600,
-  "balanceMinutes": 0
+  "balanceMinutes": -960
 }
 ```
 
@@ -173,10 +181,12 @@ Récupère le résumé mensuel.
 GET    /api/leaves
 POST   /api/leaves
 GET    /api/leaves/:id
-PATCH  /api/leaves/:id
+PATCH  /api/leaves/:id             (MANAGER / ADMIN)
 DELETE /api/leaves/:id
 
+GET    /api/leaves/pending         (MANAGER / ADMIN)
 GET    /api/leaves/balance
+POST   /api/leaves/balance/init    (MANAGER / ADMIN)
 GET    /api/leaves/history
 ```
 
@@ -184,14 +194,7 @@ GET    /api/leaves/history
 
 #### `GET /api/leaves`
 
-Liste les demandes de congé de l'utilisateur connecté.
-
-**Paramètres de query** (optionnels) :
-- `status` (`PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`)
-- `startDate`
-- `endDate`
-- `page`
-- `limit`
+Liste les demandes de congé de l'utilisateur connecté, de la plus récente à la plus ancienne.
 
 **Réponse** :
 
@@ -206,17 +209,24 @@ Liste les demandes de congé de l'utilisateur connecté.
     "endDate": "2026-10-16",
     "durationType": "FULL_DAY",
     "durationDays": 5.0,
-    "status": "PENDING",
-    "comment": null,
-    "createdAt": "2026-10-06T10:00:00.000Z",
-    "updatedAt": "2026-10-06T10:00:00.000Z"
+    "status": "APPROVED",
+    "comment": "Congés validés",
+    "decidedBy": "uuid",
+    "decidedAt": "2026-10-07T14:00:00.000Z"
   }
 ]
 ```
 
+`decidedBy`, `decidedAt` et `comment` ne sont renseignés qu'après une décision.
+
 #### `POST /api/leaves`
 
-Crée une demande de congé.
+Crée une demande de congé. La durée en jours est **calculée côté backend** :
+
+- `FULL_DAY` : nombre de **jours ouvrés** (lun → ven) entre `startDate` et `endDate` inclus ;
+- `HALF_DAY_MORNING` / `HALF_DAY_AFTERNOON` : `0,5` jour (`startDate` doit être égal à `endDate`).
+
+Le montant est réservé sur le solde (`pendingDays`) et la demande reçoit le statut `PENDING`. Une demande est refusée si le solde disponible est insuffisant (400).
 
 **Body** :
 
@@ -230,42 +240,58 @@ Crée une demande de congé.
 }
 ```
 
-`durationType` accepte : `FULL_DAY`, `MORNING`, `AFTERNOON`.
+`durationType` accepte : `FULL_DAY`, `HALF_DAY_MORNING`, `HALF_DAY_AFTERNOON`.
 
 **Réponse** : objet `LeaveRequest` créé avec statut `PENDING`.
 
 #### `GET /api/leaves/:id`
 
-Récupère une demande de congé par son identifiant.
+Récupère une demande de congé par son identifiant (404 si elle appartient à un autre utilisateur).
 
 **Réponse** : objet `LeaveRequest`.
 
+#### `DELETE /api/leaves/:id`
+
+**Annule** une demande encore `PENDING` (204) et restitue le montant sur le solde. La demande passe au statut `CANCELLED` (conservée dans l'historique). Refus 409 si la demande a déjà été traitée, 404 si elle appartient à un autre utilisateur.
+
+#### `GET /api/leaves/pending`
+
+Liste **toutes** les demandes encore `PENDING`, tous utilisateurs confondus (vue de validation côté manager). **Réservé aux `MANAGER` / `ADMIN`** (403 sinon).
+
+Chaque demande est enrichie de `applicantName` (prénom + nom du demandeur).
+
+**Réponse** : tableau d'objets `LeaveRequest`.
+
 #### `PATCH /api/leaves/:id`
 
-Met à jour une demande de congé.
+**Décision** sur une demande de congé. **Réservé aux `MANAGER` / `ADMIN`** (403 sinon).
 
-**Body** (tous les champs optionnels) :
+**Body** :
 
 ```json
 {
   "status": "APPROVED",
-  "comment": "Congé approuvé"
+  "comment": "Congés validés"
 }
 ```
 
-**Autorisation** : `MANAGER` ou `ADMIN` uniquement.
+- `status` accepte uniquement `APPROVED` ou `REJECTED` (400 sinon) ;
+- `comment` est optionnel (500 caractères max), conservé comme historique de la décision.
+
+**Règles de workflow** :
+
+- seule une demande `PENDING` peut être traitée — sinon **409** (« Seules les demandes en attente peuvent être traitées ») ;
+- demande inexistante ou identifiant invalide → **404** ;
+- **APPROVED** : le montant réservé passe de `pendingDays` à `consumedDays` (le solde disponible ne bouge pas) ;
+- **REJECTED** : le montant réservé est libéré (`pendingDays` diminue, le solde disponible remonte).
+
+Dans les deux cas, la demande est tracée : `decidedBy` (identifiant du décideur), `decidedAt`, `comment`.
 
 **Réponse** : objet `LeaveRequest` mis à jour.
 
-#### `DELETE /api/leaves/:id`
-
-Supprime une demande de congé.
-
-**Réponse** : `204 No Content`.
-
 #### `GET /api/leaves/balance`
 
-Récupère le solde de congés de l'utilisateur connecté.
+Récupère le solde de congés de l'utilisateur connecté. Le solde est créé à zéro s'il n'existe pas, puis les **acquisitions mensuelles de 2,08 jours** sont appliquées automatiquement à chaque lecture (une acquisition est créditée le 1ᵉʳ de chaque mois suivant l'initialisation).
 
 **Réponse** :
 
@@ -273,33 +299,39 @@ Récupère le solde de congés de l'utilisateur connecté.
 {
   "userId": "uuid",
   "initialBalance": 10.0,
-  "accruedDays": 2.08,
+  "accruedDays": 4.16,
   "consumedDays": 1.0,
   "pendingDays": 0.5,
-  "currentBalance": 10.58
+  "availableDays": 12.66,
+  "lastAccrualMonth": "2026-10",
+  "updatedAt": "2026-10-06T14:00:00.000Z"
 }
 ```
 
-#### `GET /api/leaves/history`
+`availableDays = initialBalance + accruedDays − consumedDays − pendingDays`.
 
-Récupère l'historique des transactions de congés.
+#### `POST /api/leaves/balance/init`
 
-**Réponse** :
+Initialise le solde initial de congés d'un employé. **Réservé aux `MANAGER` / `ADMIN`.**
+
+**Body** :
 
 ```json
-[
-  {
-    "id": "uuid",
-    "userId": "uuid",
-    "type": "ACCRUAL",
-    "amount": 2.08,
-    "reason": "Acquisition mensuelle octobre 2026",
-    "referenceId": null,
-    "date": "2026-10-01",
-    "createdAt": "2026-10-01T00:00:00.000Z"
-  }
-]
+{
+  "initialDays": 10.0,
+  "userId": "uuid"
+}
 ```
+
+`userId` est optionnel (défaut : l'utilisateur connecté). Refus 409 si un solde existe déjà.
+
+**Réponse** : objet `LeaveBalance`.
+
+#### `GET /api/leaves/history`
+
+Historique des demandes de congé (alias de `GET /api/leaves`).
+
+> Le journal détaillé des mouvements (`LeaveTransaction` : `INIT`, `ACCRUAL`, `LEAVE_TAKEN`, `LEAVE_RELEASED`, `DECISION`) est conservé en base mais n'est pas exposé par l'API à ce stade.
 
 ## Dashboard
 
@@ -309,29 +341,71 @@ Récupère l'historique des transactions de congés.
 GET /api/dashboard
 ```
 
-Récupère les indicateurs synthétiques pour l'utilisateur connecté.
+Agrège en **une seule requête** les indicateurs synthétiques de
+l'utilisateur connecté (tous rôles, Bearer requis). Source de vérité des
+calculs : backend (`DashboardService`).
 
 **Réponse** :
 
 ```json
 {
+  "generatedAt": "2026-10-07T12:48:28.791Z",
   "today": {
+    "date": "2026-10-07",
     "workedMinutes": 480,
     "expectedMinutes": 480,
-    "balanceMinutes": 0
+    "balanceMinutes": 0,
+    "recorded": true
   },
   "week": {
-    "workedMinutes": 2460,
+    "weekStart": "2026-10-05",
+    "weekEnd": "2026-10-11",
+    "workedMinutes": 1920,
     "expectedMinutes": 2400,
-    "balanceMinutes": 60
+    "balanceMinutes": -480,
+    "recordedDays": 4
   },
   "leaves": {
-    "currentBalance": 10.58,
-    "consumedDays": 1.0,
-    "pendingDays": 0.5
+    "initialBalance": 10,
+    "accruedDays": 4.16,
+    "consumedDays": 1,
+    "pendingDays": 0.5,
+    "availableDays": 12.66,
+    "pendingRequests": 1
+  },
+  "trends": {
+    "daily": [
+      { "date": "2026-09-24", "workedMinutes": 480 }
+    ],
+    "weekly": [
+      { "weekStart": "2026-08-25", "workedMinutes": 2460, "expectedMinutes": 2400 }
+    ]
+  },
+  "stats": {
+    "windowDays": 30,
+    "recordedDays": 21,
+    "totalWorkedMinutes": 10080,
+    "averageMinutesPerDay": 480,
+    "daysAboveObjective": 3,
+    "daysBelowObjective": 2
   }
 }
 ```
+
+**Détail des indicateurs** :
+
+| Bloc | Contenu |
+|------|---------|
+| `today` | Journée du jour (`expectedMinutes` = 480 par défaut ; `recorded = false` si aucune journée enregistrée) |
+| `week` | Semaine en cours (lundi → dimanche), objectif hebdomadaire 2400 min |
+| `leaves` | Solde de congés (acquisition 2,08 j/mois appliquée à la lecture) + nombre de demandes `PENDING` de l'utilisateur |
+| `trends.daily` | 14 derniers jours (do -13 → aujourd'hui), `workedMinutes` à 0 si non pointé |
+| `trends.weekly` | 8 dernières semaines (lundi → dimanche), objectif 2400 min par semaine |
+| `stats` | Fenêtre glissante de 30 jours : journées `COMPLETED`, total, moyenne par jour pointé, jours au-dessus/en dessous de l'objectif |
+
+> Les régularisations de solde (`ACCRUAL`) et la création automatique du
+> solde sont déléguées à `LeavesService.balance()` : le dashboard expose
+> toujours le solde courant recalculé.
 
 ## Authentification et autorisation
 

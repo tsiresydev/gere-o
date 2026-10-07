@@ -4,7 +4,7 @@ import { api, ApiError } from '../services/api';
 import { ROLE_LABELS, roleClass } from '../types/roles';
 import type { User } from '../types/user';
 
-export function HomePage() {
+export function ProfilePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
@@ -46,10 +46,8 @@ export function HomePage() {
   return (
     <div className="page">
       <div className="page__head">
-        <h1 className="page__title">
-          Bonjour {user.firstName} {user.lastName}
-        </h1>
-        <p className="page__subtitle">Votre espace de gestion du temps et des congés.</p>
+        <h1 className="page__title">Mon profil</h1>
+        <p className="page__subtitle">Vos informations personnelles et votre rôle.</p>
       </div>
 
       <div className="grid">
@@ -80,14 +78,6 @@ export function HomePage() {
             </div>
           </dl>
           <p className="card__note">Source : GET /api/auth/me</p>
-        </section>
-
-        <section className="card">
-          <h2 className="card__title">Suivi du temps</h2>
-          <p className="empty-state">
-            L’enregistrement quotidien des heures (entrée, pause, sortie) arrivera avec le prochain
-            sprint.
-          </p>
         </section>
 
         <section className="card">

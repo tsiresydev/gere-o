@@ -1,0 +1,5 @@
+export enum LeaveDurationType {
+  FULL_DAY = 'FULL_DAY',
+  HALF_DAY_MORNING = 'HALF_DAY_MORNING',
+  HALF_DAY_AFTERNOON = 'HALF_DAY_AFTERNOON',
+}
