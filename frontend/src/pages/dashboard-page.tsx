@@ -55,12 +55,36 @@ function BarChart({ points }: { points: ChartPoint[] }) {
   );
 }
 
+function WeekSummarySkeleton() {
+  return (
+    <div className="stats-row">
+      <div className="stat-card">
+        <span className="stat-card__label">Réalisé</span>
+        <div className="skeleton skeleton--text" style={{ width: '80px' }} />
+      </div>
+      <div className="stat-card">
+        <span className="stat-card__label">Objectif</span>
+        <div className="skeleton skeleton--text" style={{ width: '80px' }} />
+      </div>
+      <div className="stat-card">
+        <span className="stat-card__label">Solde</span>
+        <div className="skeleton skeleton--text" style={{ width: '80px' }} />
+      </div>
+      <div className="stat-card">
+        <span className="stat-card__label">Jours pointés</span>
+        <div className="skeleton skeleton--text" style={{ width: '60px' }} />
+      </div>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [weekStart, setWeekStart] = useState<string | null>(null);
+  const [weekLoading, setWeekLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +95,7 @@ export function DashboardPage() {
         if (!cancelled) {
           setDashboard(data);
           setError(null);
+          setWeekLoading(false);
         }
       })
       .catch((err: unknown) => {
@@ -80,6 +105,7 @@ export function DashboardPage() {
               ? err.message
               : 'Impossible de charger le tableau de bord.',
           );
+          setWeekLoading(false);
         }
       })
       .finally(() => {
@@ -106,13 +132,13 @@ export function DashboardPage() {
     date.setUTCDate(date.getUTCDate() + (direction === 'next' ? 7 : -7));
     const newWeekStart = date.toISOString().slice(0, 10);
     setWeekStart(newWeekStart);
-    setLoading(true);
+    setWeekLoading(true);
   };
 
   const goToCurrentWeek = (): void => {
     if (weekStart !== null) {
       setWeekStart(null);
-      setLoading(true);
+      setWeekLoading(true);
     }
   };
 
@@ -181,7 +207,7 @@ export function DashboardPage() {
 
       <section className="stats-row">
         <div className="stat-card">
-          <span className="stat-card__label">Aujourd’hui</span>
+          <span className="stat-card__label">Aujourd'hui</span>
           <span className="stat-card__value">
             {formatDuration(today.workedMinutes)}
           </span>
@@ -244,6 +270,7 @@ export function DashboardPage() {
                 className="button button--ghost button--small"
                 onClick={() => navigateWeek('prev')}
                 aria-label="Semaine précédente"
+                disabled={weekLoading}
               >
                 ‹ Précédente
               </button>
@@ -253,6 +280,7 @@ export function DashboardPage() {
                   className="button button--ghost button--small"
                   onClick={goToCurrentWeek}
                   aria-label="Semaine actuelle"
+                  disabled={weekLoading}
                 >
                   Semaine actuelle
                 </button>
@@ -262,38 +290,43 @@ export function DashboardPage() {
                 className="button button--ghost button--small"
                 onClick={() => navigateWeek('next')}
                 aria-label="Semaine suivante"
+                disabled={weekLoading}
               >
                 Suivante ›
               </button>
             </div>
           </div>
         </div>
-        <div className="stats-row">
-          <div className="stat-card">
-            <span className="stat-card__label">Réalisé</span>
-            <span className="stat-card__value">
-              {formatDuration(week.workedMinutes)}
-            </span>
+        {weekLoading ? (
+          <WeekSummarySkeleton />
+        ) : (
+          <div className="stats-row">
+            <div className="stat-card">
+              <span className="stat-card__label">Réalisé</span>
+              <span className="stat-card__value">
+                {formatDuration(week.workedMinutes)}
+              </span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card__label">Objectif</span>
+              <span className="stat-card__value">
+                {formatDuration(week.expectedMinutes)}
+              </span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card__label">Solde</span>
+              <span
+                className={`stat-card__value ${balanceClass(week.balanceMinutes)}`}
+              >
+                {formatBalance(week.balanceMinutes)}
+              </span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card__label">Jours pointés</span>
+              <span className="stat-card__value">{week.recordedDays}</span>
+            </div>
           </div>
-          <div className="stat-card">
-            <span className="stat-card__label">Objectif</span>
-            <span className="stat-card__value">
-              {formatDuration(week.expectedMinutes)}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card__label">Solde</span>
-            <span
-              className={`stat-card__value ${balanceClass(week.balanceMinutes)}`}
-            >
-              {formatBalance(week.balanceMinutes)}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card__label">Jours pointés</span>
-            <span className="stat-card__value">{week.recordedDays}</span>
-          </div>
-        </div>
+        )}
       </section>
 
       <section className="card card--wide">
