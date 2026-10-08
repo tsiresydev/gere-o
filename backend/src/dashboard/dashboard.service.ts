@@ -27,11 +27,12 @@ export class DashboardService {
     private readonly leavesService: LeavesService,
   ) {}
 
-  async getForUser(userId: string): Promise<DashboardResponse> {
+  async getForUser(userId: string, weekStart?: string): Promise<DashboardResponse> {
     const today = this.todayISO();
     const monday = this.mondayOf(this.parseISODate(today));
-    const weekStart = this.toISODate(monday);
-    const weekEnd = this.toISODate(this.addDays(monday, 6));
+    const weekStartDate = weekStart ? this.parseISODate(weekStart) : monday;
+    const weekStartStr = this.toISODate(weekStartDate);
+    const weekEnd = this.toISODate(this.addDays(weekStartDate, 6));
 
     const trendStart = this.toISODate(this.addDays(monday, -(WEEKLY_TREND_WEEKS - 1) * 7));
     const statsStart = this.toISODate(this.addDays(this.parseISODate(today), -(STATS_WINDOW_DAYS - 1)));
@@ -42,7 +43,7 @@ export class DashboardService {
       this.leavesService.balance(userId),
     ]);
 
-    const weekDays = days.filter((day) => day.date >= weekStart && day.date <= weekEnd);
+    const weekDays = days.filter((day) => day.date >= weekStartStr && day.date <= weekEnd);
     const weekWorkedMinutes = weekDays
       .filter((day) => day.status === WorkDayStatus.COMPLETED)
       .reduce((total, day) => total + day.workedMinutes, 0);
@@ -64,7 +65,7 @@ export class DashboardService {
         recorded: Boolean(todayDay),
       },
       week: {
-        weekStart,
+        weekStart: weekStartStr,
         weekEnd,
         workedMinutes: weekWorkedMinutes,
         expectedMinutes: DEFAULT_WEEKLY_EXPECTED_MINUTES,
@@ -74,7 +75,7 @@ export class DashboardService {
       },
       leaves: this.leaveIndicators(balance),
       trends: {
-        daily: this.dailyTrend(days, weekStart, weekEnd),
+        daily: this.dailyTrend(days, weekStartStr, weekEnd),
         weekly: this.weeklyTrend(days, monday),
       },
       stats: this.buildStats(completedInWindow),

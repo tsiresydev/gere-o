@@ -60,12 +60,13 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [weekStart, setWeekStart] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     dashboardService
-      .get()
+      .get(weekStart ?? undefined)
       .then((data) => {
         if (!cancelled) {
           setDashboard(data);
@@ -90,12 +91,29 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, weekStart]);
 
   const retry = (): void => {
     setLoading(true);
     setError(null);
     setReloadKey((key) => key + 1);
+  };
+
+  const navigateWeek = (direction: 'prev' | 'next'): void => {
+    const currentWeekStart = weekStart ?? dashboard?.week.weekStart;
+    if (!currentWeekStart) return;
+    const date = new Date(`${currentWeekStart}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + (direction === 'next' ? 7 : -7));
+    const newWeekStart = date.toISOString().slice(0, 10);
+    setWeekStart(newWeekStart);
+    setLoading(true);
+  };
+
+  const goToCurrentWeek = (): void => {
+    if (weekStart !== null) {
+      setWeekStart(null);
+      setLoading(true);
+    }
   };
 
   if (loading) {
@@ -124,6 +142,7 @@ export function DashboardPage() {
 
   const { today, week, leaves, trends, stats } = dashboard;
   const dailyObjective = today.expectedMinutes;
+  const isCurrentWeek = weekStart === null;
 
   // Filter to business days only (Mon-Fri) for the chart
   const businessDayPoints: ChartPoint[] = trends.daily
@@ -215,9 +234,39 @@ export function DashboardPage() {
       <section className="card card--wide">
         <div className="section-head">
           <h2 className="section-head__title">Résumé de la semaine</h2>
-          <span className="segment-nav__label">
-            du {formatDateFr(week.weekStart)} au {formatDateFr(week.weekEnd)}
-          </span>
+          <div className="week-nav">
+            <span className="segment-nav__label">
+              du {formatDateFr(week.weekStart)} au {formatDateFr(week.weekEnd)}
+            </span>
+            <div className="week-nav__actions">
+              <button
+                type="button"
+                className="button button--ghost button--small"
+                onClick={() => navigateWeek('prev')}
+                aria-label="Semaine précédente"
+              >
+                ‹ Précédente
+              </button>
+              {!isCurrentWeek && (
+                <button
+                  type="button"
+                  className="button button--ghost button--small"
+                  onClick={goToCurrentWeek}
+                  aria-label="Semaine actuelle"
+                >
+                  Semaine actuelle
+                </button>
+              )}
+              <button
+                type="button"
+                className="button button--ghost button--small"
+                onClick={() => navigateWeek('next')}
+                aria-label="Semaine suivante"
+              >
+                Suivante ›
+              </button>
+            </div>
+          </div>
         </div>
         <div className="stats-row">
           <div className="stat-card">
@@ -282,7 +331,7 @@ export function DashboardPage() {
             </span>
           </div>
           <div className="stat-card">
-            <span className="stat-card__label">Au-dessus de l’objectif</span>
+            <span className="stat-card__label">Au-dessus de l'objectif</span>
             <span className="stat-card__value stat-card__value--positive">
               {stats.daysAboveObjective}
             </span>

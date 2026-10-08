@@ -631,6 +631,21 @@ a:hover {
   margin-bottom: 14px;
 }
 
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.week-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .section-head__title {
   font-size: 16px;
   font-weight: 600;
