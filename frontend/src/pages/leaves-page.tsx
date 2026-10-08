@@ -3,12 +3,15 @@ import type { FormEvent } from 'react';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../services/api';
 import { leavesService } from '../services/leaves.service';
+import { usersService } from '../services/users.service';
 import type {
   CreateLeaveInput,
   LeaveBalance,
   LeaveDecision,
   LeaveRequest,
+  InitializeBalanceInput,
 } from '../types/leave';
+import type { User } from '../types/user';
 import {
   LEAVE_DURATION_LABELS,
   LEAVE_DURATION_OPTIONS,
@@ -51,6 +54,14 @@ export function LeavesPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [initModalOpen, setInitModalOpen] = useState(false);
+  const [initUsers, setInitUsers] = useState<User[]>([]);
+  const [initLoadingUsers, setInitLoadingUsers] = useState(false);
+  const [initSelectedUserId, setInitSelectedUserId] = useState<string>('');
+  const [initInitialDays, setInitInitialDays] = useState<number>(20);
+  const [initSubmitting, setInitSubmitting] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const [balanceData, list, pendingList] = await Promise.all([
@@ -166,6 +177,59 @@ export function LeavesPage() {
       });
   };
 
+  const handleOpenInitModal = async (): Promise<void> => {
+    setInitModalOpen(true);
+    setInitError(null);
+    setInitSelectedUserId('');
+    setInitInitialDays(20);
+    setInitLoadingUsers(true);
+    try {
+      const users = await usersService.list();
+      setInitUsers(users);
+    } catch (err: unknown) {
+      setInitError(err instanceof ApiError ? err.message : 'Impossible de charger les utilisateurs.');
+    } finally {
+      setInitLoadingUsers(false);
+    }
+  };
+
+  const handleCloseInitModal = (): void => {
+    setInitModalOpen(false);
+    setInitUsers([]);
+    setInitError(null);
+  };
+
+  const handleInitSubmit = (): void => {
+    if (!initSelectedUserId) {
+      setInitError('Veuillez sélectionner un utilisateur.');
+      return;
+    }
+    if (initInitialDays < 0) {
+      setInitError('Le nombre de jours doit être positif.');
+      return;
+    }
+    setInitSubmitting(true);
+    setInitError(null);
+
+    const input: InitializeBalanceInput = {
+      userId: initSelectedUserId,
+      initialDays: initInitialDays,
+    };
+
+    leavesService
+      .initialize(input)
+      .then(() => {
+        handleCloseInitModal();
+        refresh();
+      })
+      .catch((err: unknown) => {
+        setInitError(err instanceof ApiError ? err.message : "Impossible d'initialiser le solde.");
+      })
+      .finally(() => {
+        setInitSubmitting(false);
+      });
+  };
+
   if (loading) {
     return (
       <div className="page-loading" role="status">
@@ -219,6 +283,18 @@ export function LeavesPage() {
               {formatDays(balance.initialBalance)}
             </span>
           </div>
+          {isReviewer && (
+            <div className="stat-card">
+              <button
+                type="button"
+                className="button button--ghost button--block"
+                onClick={handleOpenInitModal}
+                disabled={initLoadingUsers}
+              >
+                {initLoadingUsers ? 'Chargement…' : 'Initialiser un solde'}
+              </button>
+            </div>
+          )}
         </section>
       )}
 
@@ -441,6 +517,63 @@ export function LeavesPage() {
           )}
         </section>
       </div>
+
+      {initModalOpen && (
+        <div className="modal-overlay" onClick={handleCloseInitModal} role="dialog" aria-modal="true" aria-labelledby="init-modal-title">
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2 id="init-modal-title" className="modal__title">Initialiser un solde de congés</h2>
+              <button type="button" className="modal__close" onClick={handleCloseInitModal} aria-label="Fermer">
+                ×
+              </button>
+            </div>
+            <div className="modal__body">
+              {initError && (
+                <div className="alert alert--error" role="alert">
+                  {initError}
+                </div>
+              )}
+              <div className="field">
+                <label className="field__label" htmlFor="initUser">Utilisateur</label>
+                <select
+                  id="initUser"
+                  className="input"
+                  value={initSelectedUserId}
+                  onChange={(e) => setInitSelectedUserId(e.target.value)}
+                  disabled={initLoadingUsers}
+                >
+                  <option value="">— Sélectionner —</option>
+                  {initUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.firstName} {u.lastName} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="initDays">Jours initiaux</label>
+                <input
+                  id="initDays"
+                  type="number"
+                  className="input"
+                  min="0"
+                  step="0.5"
+                  value={initInitialDays}
+                  onChange={(e) => setInitInitialDays(Number(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+            <div className="modal__footer">
+              <button type="button" className="button button--ghost" onClick={handleCloseInitModal} disabled={initSubmitting}>
+                Annuler
+              </button>
+              <button type="button" className="button" onClick={handleInitSubmit} disabled={initSubmitting || !initSelectedUserId}>
+                {initSubmitting ? 'Initialisation…' : 'Initialiser'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

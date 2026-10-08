@@ -4,6 +4,7 @@ import type {
   DecideLeaveInput,
   LeaveBalance,
   LeaveRequest,
+  InitializeBalanceInput,
 } from '../types/leave';
 
 export const leavesService = {
@@ -39,5 +40,12 @@ export const leavesService = {
 
   remove(id: string): Promise<void> {
     return api<void>(`/leaves/${id}`, { method: 'DELETE' });
+  },
+
+  initialize(input: InitializeBalanceInput): Promise<LeaveBalance> {
+    return api<LeaveBalance>('/leaves/balance/init', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
 };

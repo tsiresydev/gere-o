@@ -189,7 +189,21 @@ export class LeavesService {
   async initialize(userId: string, initialDays: number): Promise<LeaveBalanceDocument> {
     const existing = await this.balanceModel.findOne({ userId });
     if (existing) {
-      throw new ConflictException('Le solde de congés existe déjà pour cet utilisateur');
+      const previousInitial = existing.initialBalance;
+      const delta = initialDays - previousInitial;
+      existing.initialBalance = initialDays;
+      existing.availableDays = this.recomputeAvailable(existing);
+      await existing.save();
+
+      await this.transactionModel.create({
+        userId,
+        type: LeaveTransactionType.INIT,
+        amount: delta,
+        reason: `Ajustement solde initial (${previousInitial} → ${initialDays})`,
+        date: this.today(),
+      });
+
+      return existing;
     }
 
     const balance = await this.balanceModel.create({

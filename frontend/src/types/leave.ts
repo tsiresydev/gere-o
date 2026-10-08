@@ -43,6 +43,11 @@ export interface DecideLeaveInput {
   comment?: string;
 }
 
+export interface InitializeBalanceInput {
+  userId: string;
+  initialDays: number;
+}
+
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   PAID: 'Payé',
   UNPAID: 'Non payé',

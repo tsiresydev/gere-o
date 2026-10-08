@@ -133,7 +133,7 @@ describe('Leaves — API', () => {
       });
     });
 
-    it('initialise le solde d’un autre employé puis refuse le doublon (409)', async () => {
+    it('initialise le solde d’un autre employé puis met à jour (réinitialisation autorisée)', async () => {
       await request(server)
         .post('/api/leaves/balance/init')
         .set(managerAuth())
@@ -143,10 +143,11 @@ describe('Leaves — API', () => {
       const res = await request(server)
         .post('/api/leaves/balance/init')
         .set(managerAuth())
-        .send({ initialDays: 10, userId: otherUserId })
-        .expect(409);
+        .send({ initialDays: 15, userId: otherUserId })
+        .expect(201);
 
-      expect(res.body.message).toBe('Le solde de congés existe déjà pour cet utilisateur');
+      expect(res.body.initialBalance).toBe(15);
+      expect(res.body.availableDays).toBe(15);
     });
   });
 
