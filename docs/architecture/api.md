@@ -333,79 +333,76 @@ Historique des demandes de congé (alias de `GET /api/leaves`).
 
 > Le journal détaillé des mouvements (`LeaveTransaction` : `INIT`, `ACCRUAL`, `LEAVE_TAKEN`, `LEAVE_RELEASED`, `DECISION`) est conservé en base mais n'est pas exposé par l'API à ce stade.
 
-## Dashboard
+## Calendrier
 
 ### Route
 
 ```
-GET /api/dashboard
+GET /api/calendar
 ```
 
-Agrège en **une seule requête** les indicateurs synthétiques de
-l'utilisateur connecté (tous rôles, Bearer requis). Source de vérité des
-calculs : backend (`DashboardService`).
+Retourne une vue calendrier (mois ou plage) pour l'utilisateur connecté.
+
+**Query params** (mutuellement exclusifs : soit `month`, soit `start+end`)
+
+| Paramètre | Format | Requis | Description |
+|---|---|---|---|
+| `month` | `YYYY-MM` | non | Mois complet (défaut = mois courant) |
+| `start` | `YYYY-MM-DD` | avec `end` | Début de plage |
+| `end` | `YYYY-MM-DD` | avec `start` | Fin de plage |
+
+**Règles** : si `start` ou `end` présent seul → 400 ; `end < start` → 400 ; plage max **92 jours** → 400.
 
 **Réponse** :
 
 ```json
 {
-  "generatedAt": "2026-10-07T12:48:28.791Z",
-  "today": {
-    "date": "2026-10-07",
-    "workedMinutes": 480,
-    "expectedMinutes": 480,
-    "balanceMinutes": 0,
-    "recorded": true
-  },
-  "week": {
-    "weekStart": "2026-10-05",
-    "weekEnd": "2026-10-11",
-    "workedMinutes": 1920,
-    "expectedMinutes": 2400,
-    "balanceMinutes": -480,
-    "recordedDays": 4
-  },
-  "leaves": {
-    "initialBalance": 10,
-    "accruedDays": 4.16,
-    "consumedDays": 1,
-    "pendingDays": 0.5,
-    "availableDays": 12.66,
-    "pendingRequests": 1
-  },
-  "trends": {
-    "daily": [
-      { "date": "2026-09-24", "workedMinutes": 480 }
-    ],
-    "weekly": [
-      { "weekStart": "2026-08-25", "workedMinutes": 2460, "expectedMinutes": 2400 }
-    ]
-  },
-  "stats": {
-    "windowDays": 30,
-    "recordedDays": 21,
-    "totalWorkedMinutes": 10080,
-    "averageMinutesPerDay": 480,
-    "daysAboveObjective": 3,
-    "daysBelowObjective": 2
-  }
+  "start": "2026-10-01",
+  "end": "2026-10-31",
+  "days": [
+    {
+      "date": "2026-10-01",
+      "isWeekend": true,
+      "kind": "WEEKEND",
+      "workDay": null,
+      "leaves": []
+    },
+    {
+      "date": "2026-10-07",
+      "isWeekend": false,
+      "kind": "WORKED",
+      "workDay": {
+        "entryTime": "08:45",
+        "breakStart": "13:00",
+        "breakEnd": "14:00",
+        "exitTime": "17:45",
+        "workedMinutes": 480,
+        "balanceMinutes": 0,
+        "status": "COMPLETED"
+      },
+      "leaves": []
+    },
+    {
+      "date": "2026-10-09",
+      "isWeekend": false,
+      "kind": "LEAVE",
+      "workDay": null,
+      "leaves": [
+        { "id": "x", "leaveType": "PAID", "durationType": "FULL_DAY", "status": "APPROVED" }
+      ]
+    },
+    {
+      "date": "2026-10-14",
+      "isWeekend": false,
+      "kind": "ABSENCE",
+      "workDay": null,
+      "leaves": []
+    }
+  ]
 }
 ```
 
-**Détail des indicateurs** :
-
-| Bloc | Contenu |
-|------|---------|
-| `today` | Journée du jour (`expectedMinutes` = 480 par défaut ; `recorded = false` si aucune journée enregistrée) |
-| `week` | Semaine en cours (lundi → dimanche), objectif hebdomadaire 2400 min |
-| `leaves` | Solde de congés (acquisition 2,08 j/mois appliquée à la lecture) + nombre de demandes `PENDING` de l'utilisateur |
-| `trends.daily` | 14 derniers jours (do -13 → aujourd'hui), `workedMinutes` à 0 si non pointé |
-| `trends.weekly` | 8 dernières semaines (lundi → dimanche), objectif 2400 min par semaine |
-| `stats` | Fenêtre glissante de 30 jours : journées `COMPLETED`, total, moyenne par jour pointé, jours au-dessus/en dessous de l'objectif |
-
-> Les régularisations de solde (`ACCRUAL`) et la création automatique du
-> solde sont déléguées à `LeavesService.balance()` : le dashboard expose
-> toujours le solde courant recalculé.
+**Kinds** : `WORKED`, `LEAVE` (présence de congé `APPROVED` sur le jour), `ABSENCE` (jour passé non pointé, sans congé approuvé), `FUTURE`, `WEEKEND`. Les congés `PENDING` sont visibles dans le calendrier via `leaves[]` (plafonné à la plage), mais n'affectent pas `kind` à `LEAVE`.
 
 ## Authentification et autorisation
 

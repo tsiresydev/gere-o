@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import { AuthModule } from '../../src/auth/auth.module';
 import { configureApp } from '../../src/common/setup-app';
 import configuration from '../../src/config/configuration';
+import { CalendarModule } from '../../src/calendar/calendar.module';
 import { DashboardModule } from '../../src/dashboard/dashboard.module';
 import { LeaveBalance } from '../../src/leaves/entities/leave-balance.schema';
 import { LeaveRequest } from '../../src/leaves/entities/leave-request.schema';
@@ -38,6 +39,7 @@ export async function createTestApp(): Promise<TestApp> {
       WorkDaysModule,
       LeavesModule,
       DashboardModule,
+      CalendarModule,
     ],
   })
     .overrideProvider(getModelToken(User.name))
