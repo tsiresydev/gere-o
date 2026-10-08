@@ -15,6 +15,7 @@ interface ChartPoint {
   title: string;
   value: number;
   objective: number;
+  isWeekend?: boolean;
 }
 
 function balanceClass(value: number): string {
@@ -39,7 +40,7 @@ function BarChart({ points }: { points: ChartPoint[] }) {
         <div className="bar-chart__column" key={point.key} title={point.title}>
           <div className="bar-chart__track">
             <div
-              className="bar-chart__bar"
+              className={`bar-chart__bar ${point.isWeekend ? 'bar-chart__bar--weekend' : ''}`}
               style={{ height: `${Math.round((point.value / scale) * 100)}%` }}
             />
             <span
@@ -47,7 +48,7 @@ function BarChart({ points }: { points: ChartPoint[] }) {
               style={{ bottom: `${Math.round((point.objective / scale) * 100)}%` }}
             />
           </div>
-          <span className="bar-chart__label">{point.label}</span>
+          <span className={`bar-chart__label ${point.isWeekend ? 'bar-chart__label--weekend' : ''}`}>{point.label}</span>
         </div>
       ))}
     </div>
@@ -124,13 +125,17 @@ export function DashboardPage() {
   const { today, week, leaves, trends, stats } = dashboard;
   const dailyObjective = today.expectedMinutes;
 
-  const dailyPoints: ChartPoint[] = trends.daily.map((point) => ({
-    key: point.date,
-    label: point.date.slice(8),
-    title: `${formatDateFr(point.date)} : ${formatDuration(point.workedMinutes)}`,
-    value: point.workedMinutes,
-    objective: dailyObjective,
-  }));
+  // Filter to business days only (Mon-Fri) for the chart
+  const businessDayPoints: ChartPoint[] = trends.daily
+    .filter((point) => !point.isWeekend)
+    .map((point) => ({
+      key: point.date,
+      label: point.date.slice(8),
+      title: `${formatDateFr(point.date)} : ${formatDuration(point.workedMinutes)}`,
+      value: point.workedMinutes,
+      objective: dailyObjective,
+      isWeekend: false,
+    }));
 
   const weeklyPoints: ChartPoint[] = trends.weekly.map((point) => ({
     key: point.weekStart,
@@ -189,30 +194,20 @@ export function DashboardPage() {
             {formatDays(leaves.accruedDays)} acquis
           </span>
         </div>
-
-        <div className="stat-card">
-          <span className="stat-card__label">En attente</span>
-          <span className="stat-card__value">{leaves.pendingRequests}</span>
-          <span className="card__note">
-            {leaves.pendingRequests > 0
-              ? `${formatDays(leaves.pendingDays)} de congés à valider`
-              : 'Aucune demande en attente'}
-          </span>
-        </div>
       </section>
 
       <section className="card card--wide">
         <div className="section-head">
-          <h2 className="section-head__title">Heures des 14 derniers jours</h2>
+          <h2 className="section-head__title">Heures de la semaine</h2>
           <span className="segment-nav__label">
             Objectif {formatDuration(dailyObjective)} par jour
           </span>
         </div>
         {hasDailyData ? (
-          <BarChart points={dailyPoints} />
+          <BarChart points={businessDayPoints} />
         ) : (
           <p className="empty-state">
-            Aucune journée enregistrée sur les 14 derniers jours.
+            Aucune journée enregistrée cette semaine.
           </p>
         )}
       </section>

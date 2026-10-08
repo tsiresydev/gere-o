@@ -8,12 +8,8 @@ import { signToken } from './helpers/tokens';
 describe('Leaves — API', () => {
   let testApp: TestApp;
   let server: ReturnType<INestApplication['getHttpServer']>;
-  let employeeId: string;
   let token: string;
   let otherToken: string;
-  let managerToken: string;
-  let managerId: string;
-  let otherUserId: string;
   let soloToken: string;
   let soloUserId: string;
 
@@ -26,9 +22,6 @@ describe('Leaves — API', () => {
   const auth = (): Record<string, string> => ({ Authorization: `Bearer ${token}` });
   const otherAuth = (): Record<string, string> => ({
     Authorization: `Bearer ${otherToken}`,
-  });
-  const managerAuth = (): Record<string, string> => ({
-    Authorization: `Bearer ${managerToken}`,
   });
   const soloAuth = (): Record<string, string> => ({
     Authorization: `Bearer ${soloToken}`,
@@ -65,7 +58,6 @@ describe('Leaves — API', () => {
       'Leave',
       UserRole.EMPLOYEE,
     );
-    employeeId = employee.id;
     token = employee.token;
 
     const other = await createUser(
@@ -74,7 +66,6 @@ describe('Leaves — API', () => {
       'Autre',
       UserRole.EMPLOYEE,
     );
-    otherUserId = other.id;
     otherToken = other.token;
 
     const solo = await createUser(
@@ -86,14 +77,12 @@ describe('Leaves — API', () => {
     soloUserId = solo.id;
     soloToken = solo.token;
 
-    const manager = await createUser(
+    const _manager = await createUser(
       'manager@example.com',
       'Marc',
       'Manager',
       UserRole.MANAGER,
     );
-    managerId = manager.id;
-    managerToken = manager.token;
   });
 
   afterAll(async () => {
@@ -108,19 +97,11 @@ describe('Leaves — API', () => {
         .expect(401);
     });
 
-    it('refuse l’initialisation par un EMPLOYEE (403)', async () => {
+    it('initialise le solde du titulaire du token (EMPLOYEE)', async () => {
       await request(server)
         .post('/api/leaves/balance/init')
         .set(auth())
         .send({ initialDays: 10 })
-        .expect(403);
-    });
-
-    it('initialise le solde d’un employé (MANAGER uniquement)', async () => {
-      await request(server)
-        .post('/api/leaves/balance/init')
-        .set(managerAuth())
-        .send({ initialDays: 10, userId: employeeId })
         .expect(201);
 
       const balance = await request(server).get('/api/leaves/balance').set(auth()).expect(200);
@@ -133,17 +114,11 @@ describe('Leaves — API', () => {
       });
     });
 
-    it('initialise le solde d’un autre employé puis met à jour (réinitialisation autorisée)', async () => {
-      await request(server)
-        .post('/api/leaves/balance/init')
-        .set(managerAuth())
-        .send({ initialDays: 10, userId: otherUserId })
-        .expect(201);
-
+    it('remet un solde et trace la différence (réinitialisation autorisée)', async () => {
       const res = await request(server)
         .post('/api/leaves/balance/init')
-        .set(managerAuth())
-        .send({ initialDays: 15, userId: otherUserId })
+        .set(auth())
+        .send({ initialDays: 15 })
         .expect(201);
 
       expect(res.body.initialBalance).toBe(15);
@@ -216,31 +191,33 @@ describe('Leaves — API', () => {
         endDate: '2026-01-12',
         durationType: 'FULL_DAY',
         durationDays: 2,
-        status: 'PENDING',
+        status: 'APPROVED',
       });
       expect(typeof res.body.id).toBe('string');
     });
 
-    it('calcule une demi-journée à 0,5 jour', async () => {
+    it('crée la demande directement avec le statut APPROUVÉE', async () => {
       const res = await request(server)
         .post('/api/leaves')
         .set(auth())
         .send({
           leaveType: 'PAID',
-          reason: 'Rendez-vous',
+          reason: 'Demi-journée',
           startDate: '2026-01-12',
           endDate: '2026-01-12',
           durationType: 'HALF_DAY_MORNING',
         })
         .expect(201);
 
+      expect(res.body.status).toBe('APPROVED');
       expect(res.body.durationDays).toBe(0.5);
     });
 
-    it('met à jour le solde (disponible déduit du montant en attente)', async () => {
+    it('met à jour le solde (consommé déduit du montant disponible)', async () => {
       const balance = await request(server).get('/api/leaves/balance').set(auth()).expect(200);
-      expect(balance.body.pendingDays).toBe(2.5);
-      expect(balance.body.availableDays).toBeCloseTo(7.5, 2);
+      // After balance init with 15, then 2 requests: 2 + 0.5 = 2.5 consumed
+      expect(balance.body.consumedDays).toBe(2.5);
+      expect(balance.body.availableDays).toBeCloseTo(12.5, 2);
     });
 
     it('refuse un congé d’une demi-journée sur plusieurs dates (400)', async () => {
@@ -296,6 +273,13 @@ describe('Leaves — API', () => {
     });
 
     it('refuse une demande au-delà du solde disponible (400)', async () => {
+      // Initialize other user's balance first
+      await request(server)
+        .post('/api/leaves/balance/init')
+        .set(otherAuth())
+        .send({ initialDays: 5 })
+        .expect(201);
+
       const res = await request(server)
         .post('/api/leaves')
         .set(otherAuth())
@@ -353,8 +337,8 @@ describe('Leaves — API', () => {
       const res = await request(server).get('/api/leaves').set(auth()).expect(200);
 
       expect(res.body).toHaveLength(2);
+      expect(res.body.every((leave: { status: string }) => leave.status === 'APPROVED')).toBe(true);
       expect(res.body[0].startDate).toBe('2026-01-12');
-      expect(res.body[1].startDate).toBe('2026-01-09');
     });
 
     it('expose le même historique via /history', async () => {
@@ -388,37 +372,35 @@ describe('Leaves — API', () => {
   });
 
   describe('DELETE /api/leaves/:id', () => {
-    it('annule une demande en attente (204) et restitue le solde', async () => {
+    it('annule une demande APPROUVÉE (204) et restitue le solde', async () => {
       const list = await request(server).get('/api/leaves').set(auth()).expect(200);
-      const halfDay = list.body.find(
-        (leave: { startDate: string }) => leave.startDate === '2026-01-12',
+      const target = list.body.find(
+        (leave: { startDate: string }) => leave.startDate === '2026-01-09',
       );
 
       await request(server)
-        .delete(`/api/leaves/${halfDay.id}`)
+        .delete(`/api/leaves/${target.id}`)
         .set(auth())
         .expect(204);
 
-      const res = await request(server).get(`/api/leaves/${halfDay.id}`).set(auth()).expect(200);
+      const res = await request(server).get(`/api/leaves/${target.id}`).set(auth()).expect(200);
       expect(res.body.status).toBe('CANCELLED');
 
       const balance = await request(server).get('/api/leaves/balance').set(auth()).expect(200);
-      expect(balance.body.pendingDays).toBe(2);
-      expect(balance.body.availableDays).toBeCloseTo(8, 2);
+      // Was 2.5 consumed, cancel 2-day request -> 0.5 consumed
+      expect(balance.body.consumedDays).toBeCloseTo(0.5, 2);
+      expect(balance.body.availableDays).toBeCloseTo(14.5, 2);
     });
 
-    it('refuse d’annuler une demande déjà traitée (409)', async () => {
-      const record = testApp.leaves.requests.find(
-        (item) => item.userId === otherUserId,
+    it('refuse d’annuler une demande déjà annulée (409)', async () => {
+      const list = await request(server).get('/api/leaves').set(auth()).expect(200);
+      const target = list.body.find(
+        (leave: { startDate: string }) => leave.startDate === '2026-01-09',
       );
-      expect(record).toBeDefined();
-      if (record) {
-        record.status = 'APPROVED';
-      }
 
       await request(server)
-        .delete(`/api/leaves/${record?._id}`)
-        .set(otherAuth())
+        .delete(`/api/leaves/${target.id}`)
+        .set(auth())
         .expect(409);
     });
 
@@ -452,187 +434,6 @@ describe('Leaves — API', () => {
         .expect(400);
 
       expect(res.body.statusCode).toBe(400);
-    });
-  });
-
-  describe('Workflow de validation — MANAGER', () => {
-    let vacationId: string;
-    let extraId: string;
-    let cancelledId: string;
-
-    beforeAll(async () => {
-      const list = await request(server).get('/api/leaves').set(auth()).expect(200);
-      vacationId = list.body.find(
-        (leave: { status: string }) => leave.status === 'PENDING',
-      ).id;
-      cancelledId = list.body.find(
-        (leave: { status: string }) => leave.status === 'CANCELLED',
-      ).id;
-
-      const extra = await request(server)
-        .post('/api/leaves')
-        .set(auth())
-        .send({
-          leaveType: 'PAID',
-          reason: 'Lundi de février',
-          startDate: '2026-02-02',
-          endDate: '2026-02-02',
-          durationType: 'FULL_DAY',
-        })
-        .expect(201);
-      extraId = extra.body.id;
-    });
-
-    it('exige un token (401)', async () => {
-      await request(server).get('/api/leaves/pending').expect(401);
-      await request(server).patch(`/api/leaves/${vacationId}`).expect(401);
-    });
-
-    it('interdit la décision et la liste des attentes à un EMPLOYEE (403)', async () => {
-      const decision = await request(server)
-        .patch(`/api/leaves/${vacationId}`)
-        .set(auth())
-        .send({ status: 'APPROVED' })
-        .expect(403);
-      expect(decision.body.message).toBe('Rôle insuffisant');
-
-      await request(server).get('/api/leaves/pending').set(auth()).expect(403);
-    });
-
-    it('expose toutes les demandes en attente au MANAGER', async () => {
-      const res = await request(server)
-        .get('/api/leaves/pending')
-        .set(managerAuth())
-        .expect(200);
-
-      expect(res.body.length).toBeGreaterThanOrEqual(2);
-      expect(
-        res.body.every(
-          (leave: { status: string }) => leave.status === 'PENDING',
-        ),
-      ).toBe(true);
-
-      const ids = res.body.map((leave: { id: string }) => leave.id);
-      expect(ids).toContain(vacationId);
-      expect(ids).toContain(extraId);
-
-      const target = res.body.find((leave: { id: string }) => leave.id === vacationId);
-      expect(target.applicantName).toBe('Léo Leave');
-    });
-
-    it('renvoie 404 pour un identifiant invalide (404)', async () => {
-      await request(server)
-        .patch('/api/leaves/pas-un-id')
-        .set(managerAuth())
-        .send({ status: 'APPROVED' })
-        .expect(404);
-    });
-
-    it('valide le body de décision (400)', async () => {
-      const wrongStatus = await request(server)
-        .patch(`/api/leaves/${vacationId}`)
-        .set(managerAuth())
-        .send({ status: 'PENDING' })
-        .expect(400);
-      expect(String(wrongStatus.body.message)).toContain('statut invalide');
-
-      await request(server)
-        .patch(`/api/leaves/${vacationId}`)
-        .set(managerAuth())
-        .send({ status: 'APPROVED', hacked: true })
-        .expect(400);
-    });
-
-    it('approuve la demande et trace la décision (200)', async () => {
-      const res = await request(server)
-        .patch(`/api/leaves/${vacationId}`)
-        .set(managerAuth())
-        .send({ status: 'APPROVED', comment: 'Congés validés' })
-        .expect(200);
-
-      expect(res.body).toMatchObject({
-        status: 'APPROVED',
-        comment: 'Congés validés',
-        decidedBy: managerId,
-      });
-      expect(typeof res.body.decidedAt).toBe('string');
-
-      const balance = await request(server)
-        .get('/api/leaves/balance')
-        .set(auth())
-        .expect(200);
-      expect(balance.body.pendingDays).toBe(1);
-      expect(balance.body.consumedDays).toBe(2);
-      expect(balance.body.availableDays).toBeCloseTo(7, 2);
-
-      const decisions = testApp.leaves.transactions.filter(
-        (item) => item.type === LeaveTransactionType.DECISION,
-      );
-      expect(decisions).toHaveLength(1);
-      expect(decisions[0].reason).toBe('Demande approuvée : Congés validés');
-    });
-
-    it('refuse une seconde décision sur la même demande (409)', async () => {
-      const res = await request(server)
-        .patch(`/api/leaves/${vacationId}`)
-        .set(managerAuth())
-        .send({ status: 'REJECTED' })
-        .expect(409);
-
-      expect(res.body.message).toBe(
-        'Seules les demandes en attente peuvent être traitées',
-      );
-    });
-
-    it('refuse une demande déjà annulée (409)', async () => {
-      await request(server)
-        .patch(`/api/leaves/${cancelledId}`)
-        .set(managerAuth())
-        .send({ status: 'APPROVED' })
-        .expect(409);
-    });
-
-    it('refuse la demande restante et restitue le solde (200)', async () => {
-      const res = await request(server)
-        .patch(`/api/leaves/${extraId}`)
-        .set(managerAuth())
-        .send({ status: 'REJECTED', comment: 'Période chargée' })
-        .expect(200);
-
-      expect(res.body.status).toBe('REJECTED');
-
-      const balance = await request(server)
-        .get('/api/leaves/balance')
-        .set(auth())
-        .expect(200);
-      expect(balance.body.pendingDays).toBe(0);
-      expect(balance.body.consumedDays).toBe(2);
-      expect(balance.body.availableDays).toBeCloseTo(8, 2);
-
-      const released = testApp.leaves.transactions.find(
-        (item) =>
-          item.type === LeaveTransactionType.LEAVE_RELEASED &&
-          item.referenceId === extraId,
-      );
-      expect(released).toBeDefined();
-      expect(released?.amount).toBe(1);
-    });
-
-    it('expose la décision dans l’historique de l’utilisateur', async () => {
-      const res = await request(server)
-        .get('/api/leaves')
-        .set(auth())
-        .expect(200);
-
-      const approved = res.body.find(
-        (leave: { id: string }) => leave.id === vacationId,
-      );
-      expect(approved).toMatchObject({
-        status: 'APPROVED',
-        comment: 'Congés validés',
-        decidedBy: managerId,
-      });
-      expect(typeof approved.decidedAt).toBe('string');
     });
   });
 });

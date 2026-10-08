@@ -21,12 +21,12 @@ export interface DashboardLeaveIndicators {
   consumedDays: number;
   pendingDays: number;
   availableDays: number;
-  pendingRequests: number;
 }
 
 export interface DailyTrendPoint {
   date: string;
   workedMinutes: number;
+  isWeekend: boolean;
 }
 
 export interface WeeklyTrendPoint {

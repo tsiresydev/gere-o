@@ -3,15 +3,12 @@ import type { FormEvent } from 'react';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../services/api';
 import { leavesService } from '../services/leaves.service';
-import { usersService } from '../services/users.service';
 import type {
   CreateLeaveInput,
   LeaveBalance,
-  LeaveDecision,
   LeaveRequest,
   InitializeBalanceInput,
 } from '../types/leave';
-import type { User } from '../types/user';
 import {
   LEAVE_DURATION_LABELS,
   LEAVE_DURATION_OPTIONS,
@@ -41,38 +38,29 @@ const statusClass = (status: LeaveRequest['status']): string =>
   status.toLowerCase();
 
 export function LeavesPage() {
-  const { user } = useAuth();
-  const isReviewer = user?.role === 'MANAGER' || user?.role === 'ADMIN';
+  useAuth();
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
-  const [pending, setPending] = useState<LeaveRequest[]>([]);
-  const [comments, setComments] = useState<Record<string, string>>({});
   const [form, setForm] = useState<LeaveForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [initModalOpen, setInitModalOpen] = useState(false);
-  const [initUsers, setInitUsers] = useState<User[]>([]);
-  const [initLoadingUsers, setInitLoadingUsers] = useState(false);
-  const [initSelectedUserId, setInitSelectedUserId] = useState<string>('');
   const [initInitialDays, setInitInitialDays] = useState<number>(20);
   const [initSubmitting, setInitSubmitting] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [balanceData, list, pendingList] = await Promise.all([
+    const [balanceData, list] = await Promise.all([
       leavesService.balance(),
       leavesService.list(),
-      isReviewer ? leavesService.pending() : Promise.resolve<LeaveRequest[]>([]),
     ]);
     setBalance(balanceData);
     setRequests(list);
-    setPending(pendingList);
-  }, [isReviewer]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,15 +68,13 @@ export function LeavesPage() {
     Promise.all([
       leavesService.balance(),
       leavesService.list(),
-      isReviewer ? leavesService.pending() : Promise.resolve<LeaveRequest[]>([]),
     ])
-      .then(([balanceData, list, pendingList]) => {
+      .then(([balanceData, list]) => {
         if (cancelled) {
           return;
         }
         setBalance(balanceData);
         setRequests(list);
-        setPending(pendingList);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -106,7 +92,7 @@ export function LeavesPage() {
     return () => {
       cancelled = true;
     };
-  }, [isReviewer]);
+  }, []);
 
   const setField = <K extends keyof LeaveForm>(key: K, value: LeaveForm[K]): void => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -125,7 +111,7 @@ export function LeavesPage() {
       .then(() => setForm(EMPTY_FORM))
       .catch((err: unknown) => {
         setError(
-          err instanceof ApiError ? err.message : 'Impossible d’envoyer la demande.',
+          err instanceof ApiError ? err.message : 'Impossible d\'envoyer la demande.',
         );
       })
       .finally(() => {
@@ -142,7 +128,7 @@ export function LeavesPage() {
       .then(() => refresh())
       .catch((err: unknown) => {
         setError(
-          err instanceof ApiError ? err.message : 'Impossible d’annuler la demande.',
+          err instanceof ApiError ? err.message : 'Impossible d\'annuler la demande.',
         );
       })
       .finally(() => {
@@ -150,60 +136,18 @@ export function LeavesPage() {
       });
   };
 
-  const handleDecision = (id: string, status: LeaveDecision): void => {
-    const comment = comments[id]?.trim();
-    setDecidingId(id);
-    setError(null);
-
-    leavesService
-      .decide(id, comment ? { status, comment } : { status })
-      .then(() => refresh())
-      .then(() => {
-        setComments((previous) => {
-          const next = { ...previous };
-          delete next[id];
-          return next;
-        });
-      })
-      .catch((err: unknown) => {
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : 'Impossible de traiter la demande.',
-        );
-      })
-      .finally(() => {
-        setDecidingId(null);
-      });
-  };
-
-  const handleOpenInitModal = async (): Promise<void> => {
+  const handleOpenInitModal = (): void => {
     setInitModalOpen(true);
     setInitError(null);
-    setInitSelectedUserId('');
     setInitInitialDays(20);
-    setInitLoadingUsers(true);
-    try {
-      const users = await usersService.list();
-      setInitUsers(users);
-    } catch (err: unknown) {
-      setInitError(err instanceof ApiError ? err.message : 'Impossible de charger les utilisateurs.');
-    } finally {
-      setInitLoadingUsers(false);
-    }
   };
 
   const handleCloseInitModal = (): void => {
     setInitModalOpen(false);
-    setInitUsers([]);
     setInitError(null);
   };
 
   const handleInitSubmit = (): void => {
-    if (!initSelectedUserId) {
-      setInitError('Veuillez sélectionner un utilisateur.');
-      return;
-    }
     if (initInitialDays < 0) {
       setInitError('Le nombre de jours doit être positif.');
       return;
@@ -212,7 +156,6 @@ export function LeavesPage() {
     setInitError(null);
 
     const input: InitializeBalanceInput = {
-      userId: initSelectedUserId,
       initialDays: initInitialDays,
     };
 
@@ -260,12 +203,6 @@ export function LeavesPage() {
             </span>
           </div>
           <div className="stat-card">
-            <span className="stat-card__label">En attente</span>
-            <span className="stat-card__value">
-              {formatDays(balance.pendingDays)}
-            </span>
-          </div>
-          <div className="stat-card">
             <span className="stat-card__label">Consommés</span>
             <span className="stat-card__value">
               {formatDays(balance.consumedDays)}
@@ -283,89 +220,23 @@ export function LeavesPage() {
               {formatDays(balance.initialBalance)}
             </span>
           </div>
-          {isReviewer && (
-            <div className="stat-card">
-              <button
-                type="button"
-                className="button button--ghost button--block"
-                onClick={handleOpenInitModal}
-                disabled={initLoadingUsers}
-              >
-                {initLoadingUsers ? 'Chargement…' : 'Initialiser un solde'}
-              </button>
-            </div>
-          )}
+          <div className="stat-card">
+            <button
+              type="button"
+              className="button button--ghost button--block"
+              onClick={handleOpenInitModal}
+              disabled={initSubmitting}
+            >
+              {initSubmitting ? 'Initialisation…' : 'Initialiser mon solde'}
+            </button>
+          </div>
         </section>
       )}
 
       {balance && balance.availableDays <= 0 && (
         <p className="card__note">
-          Solde de congés à zéro : contactez votre responsable pour l’initialiser.
+          Solde de congés à zéro : initialisez votre solde ci-dessus.
         </p>
-      )}
-
-      {isReviewer && (
-        <section className="card" aria-label="Demandes à valider">
-          <h2 className="card__title">
-            Demandes à valider
-            <span className="card__count">{pending.length}</span>
-          </h2>
-
-          {pending.length === 0 ? (
-            <p className="empty-state">Aucune demande en attente.</p>
-          ) : (
-            <ul className="leave-list">
-              {pending.map((request) => (
-                <li key={request.id} className="leave-item leave-item--pending">
-                  <span className="leave-item__dates">
-                    {formatDateFr(request.startDate)} → {formatDateFr(request.endDate)}
-                  </span>
-                  <span className="leave-item__reason">
-                    {request.applicantName ?? 'Collaborateur'} — {request.reason}
-                    <span className="leave-item__meta">
-                      {LEAVE_TYPE_LABELS[request.leaveType]} ·{' '}
-                      {LEAVE_DURATION_LABELS[request.durationType]}
-                    </span>
-                  </span>
-                  <span className="leave-item__days">
-                    {formatDays(request.durationDays)}
-                  </span>
-                  <input
-                    className="input input--inline"
-                    type="text"
-                    placeholder="Commentaire"
-                    aria-label="Commentaire de décision"
-                    value={comments[request.id] ?? ''}
-                    onChange={(event) =>
-                      setComments((previous) => ({
-                        ...previous,
-                        [request.id]: event.target.value,
-                      }))
-                    }
-                  />
-                  <span className="leave-item__actions">
-                    <button
-                      type="button"
-                      className="button button--small"
-                      disabled={decidingId === request.id}
-                      onClick={() => handleDecision(request.id, 'APPROVED')}
-                    >
-                      {decidingId === request.id ? 'Traitement…' : 'Approuver'}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost button--small"
-                      disabled={decidingId === request.id}
-                      onClick={() => handleDecision(request.id, 'REJECTED')}
-                    >
-                      Refuser
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       )}
 
       <div className="grid">
@@ -461,9 +332,9 @@ export function LeavesPage() {
             </button>
 
             <p className="field__hint">
-              Les samedis et dimanches ne sont pas comptabilisés. Votre responsable
-              approuve ou refuse les demandes en attente, que vous pouvez annuler
-              tant qu’elles ne sont pas traitées.
+              Les samedis et dimanches ne sont pas comptabilisés. Votre demande est
+              automatiquement approuvée et déduite de votre solde. Vous pouvez l\'annuler
+              tant qu\'elle n\'a pas été prise en compte.
             </p>
           </form>
         </section>
@@ -486,12 +357,6 @@ export function LeavesPage() {
                       {LEAVE_TYPE_LABELS[request.leaveType]} ·{' '}
                       {LEAVE_DURATION_LABELS[request.durationType]}
                     </span>
-                    {request.decidedAt && (
-                      <span className="leave-item__meta">
-                        Décidé le {formatDateFr(request.decidedAt.slice(0, 10))}
-                        {request.comment ? ` — ${request.comment}` : ''}
-                      </span>
-                    )}
                   </span>
                   <span className="leave-item__days">
                     {formatDays(request.durationDays)}
@@ -501,7 +366,7 @@ export function LeavesPage() {
                   >
                     {LEAVE_STATUS_LABELS[request.status]}
                   </span>
-                  {request.status === 'PENDING' && (
+                  {(request.status === 'APPROVED' || request.status === 'PENDING') && (
                     <button
                       type="button"
                       className="button button--ghost button--small"
@@ -522,7 +387,7 @@ export function LeavesPage() {
         <div className="modal-overlay" onClick={handleCloseInitModal} role="dialog" aria-modal="true" aria-labelledby="init-modal-title">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
-              <h2 id="init-modal-title" className="modal__title">Initialiser un solde de congés</h2>
+              <h2 id="init-modal-title" className="modal__title">Initialiser mon solde de congés</h2>
               <button type="button" className="modal__close" onClick={handleCloseInitModal} aria-label="Fermer">
                 ×
               </button>
@@ -533,23 +398,6 @@ export function LeavesPage() {
                   {initError}
                 </div>
               )}
-              <div className="field">
-                <label className="field__label" htmlFor="initUser">Utilisateur</label>
-                <select
-                  id="initUser"
-                  className="input"
-                  value={initSelectedUserId}
-                  onChange={(e) => setInitSelectedUserId(e.target.value)}
-                  disabled={initLoadingUsers}
-                >
-                  <option value="">— Sélectionner —</option>
-                  {initUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.firstName} {u.lastName} ({u.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div className="field">
                 <label className="field__label" htmlFor="initDays">Jours initiaux</label>
                 <input
@@ -567,7 +415,7 @@ export function LeavesPage() {
               <button type="button" className="button button--ghost" onClick={handleCloseInitModal} disabled={initSubmitting}>
                 Annuler
               </button>
-              <button type="button" className="button" onClick={handleInitSubmit} disabled={initSubmitting || !initSelectedUserId}>
+              <button type="button" className="button" onClick={handleInitSubmit} disabled={initSubmitting}>
                 {initSubmitting ? 'Initialisation…' : 'Initialiser'}
               </button>
             </div>

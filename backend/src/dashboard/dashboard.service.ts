@@ -16,7 +16,6 @@ import {
 } from './dto/dashboard-response.dto';
 import { WorkDay, WorkDayDocument } from '../work-days/entities/work-day.schema';
 
-const DAILY_TREND_DAYS = 14;
 const WEEKLY_TREND_WEEKS = 8;
 const STATS_WINDOW_DAYS = 30;
 
@@ -38,10 +37,9 @@ export class DashboardService {
     const statsStart = this.toISODate(this.addDays(this.parseISODate(today), -(STATS_WINDOW_DAYS - 1)));
     const rangeStart = trendStart < statsStart ? trendStart : statsStart;
 
-    const [days, balance, pendingRequests] = await Promise.all([
+    const [days, balance] = await Promise.all([
       this.workDayModel.find({ userId, date: { $gte: rangeStart, $lte: today } }),
       this.leavesService.balance(userId),
-      this.leavesService.countPendingFor(userId),
     ]);
 
     const weekDays = days.filter((day) => day.date >= weekStart && day.date <= weekEnd);
@@ -74,9 +72,9 @@ export class DashboardService {
         recordedDays: weekDays.filter((day) => day.status === WorkDayStatus.COMPLETED)
           .length,
       },
-      leaves: this.leaveIndicators(balance, pendingRequests),
+      leaves: this.leaveIndicators(balance),
       trends: {
-        daily: this.dailyTrend(days, today),
+        daily: this.dailyTrend(days, weekStart, weekEnd),
         weekly: this.weeklyTrend(days, monday),
       },
       stats: this.buildStats(completedInWindow),
@@ -91,7 +89,6 @@ export class DashboardService {
       pendingDays: number;
       availableDays: number;
     },
-    pendingRequests: number,
   ): DashboardLeaveIndicators {
     return {
       initialBalance: balance.initialBalance,
@@ -99,20 +96,21 @@ export class DashboardService {
       consumedDays: balance.consumedDays,
       pendingDays: balance.pendingDays,
       availableDays: balance.availableDays,
-      pendingRequests,
     };
   }
 
-  private dailyTrend(days: WorkDayDocument[], today: string): DailyTrendPoint[] {
+  private dailyTrend(days: WorkDayDocument[], weekStart: string, weekEnd: string): DailyTrendPoint[] {
     const points: DailyTrendPoint[] = [];
-    const start = this.toISODate(
-      this.addDays(this.parseISODate(today), -(DAILY_TREND_DAYS - 1)),
-    );
+    const start = this.parseISODate(weekStart);
+    const end = this.parseISODate(weekEnd);
 
-    for (let offset = 0; offset < DAILY_TREND_DAYS; offset++) {
-      const date = this.toISODate(this.addDays(this.parseISODate(start), offset));
+    let cursor = start;
+    while (cursor <= end) {
+      const date = this.toISODate(cursor);
       const day = days.find((item) => item.date === date);
-      points.push({ date, workedMinutes: day?.workedMinutes ?? 0 });
+      const isWeekend = cursor.getUTCDay() === 0 || cursor.getUTCDay() === 6;
+      points.push({ date, workedMinutes: day?.workedMinutes ?? 0, isWeekend });
+      cursor = this.addDays(cursor, 1);
     }
 
     return points;

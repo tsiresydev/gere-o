@@ -38,13 +38,8 @@ export interface CreateLeaveInput {
   durationType: LeaveDurationType;
 }
 
-export interface DecideLeaveInput {
-  status: LeaveDecision;
-  comment?: string;
-}
-
 export interface InitializeBalanceInput {
-  userId: string;
+  userId?: string;
   initialDays: number;
 }
 

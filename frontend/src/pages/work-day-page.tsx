@@ -46,6 +46,7 @@ function buildForm(current: WorkDay | null): FormState {
 
 export function WorkDayPage() {
   const today = todayISO();
+  const [selectedDate, setSelectedDate] = useState<string>(today);
 
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [day, setDay] = useState<WorkDay | null>(null);
@@ -58,25 +59,25 @@ export function WorkDayPage() {
   const refresh = useCallback(async () => {
     const [page, daily] = await Promise.all([
       workDaysService.list(),
-      workDaysService.dailySummary(today),
+      workDaysService.dailySummary(selectedDate),
     ]);
 
-    const current = page.items.find((item) => item.date === today) ?? null;
+    const current = page.items.find((item) => item.date === selectedDate) ?? null;
     setHistory(page.items);
     setSummary(daily);
     setDay(current);
     setForm(buildForm(current));
-  }, [today]);
+  }, [selectedDate]);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([workDaysService.list(), workDaysService.dailySummary(today)])
+    Promise.all([workDaysService.list(), workDaysService.dailySummary(selectedDate)])
       .then(([page, daily]) => {
         if (cancelled) {
           return;
         }
-        const current = page.items.find((item) => item.date === today) ?? null;
+        const current = page.items.find((item) => item.date === selectedDate) ?? null;
         setHistory(page.items);
         setSummary(daily);
         setDay(current);
@@ -98,7 +99,14 @@ export function WorkDayPage() {
     return () => {
       cancelled = true;
     };
-  }, [today]);
+  }, [selectedDate]);
+
+  const handleDateChange = (newDate: string): void => {
+    setSelectedDate(newDate);
+    setLoading(true);
+    setError(null);
+    // The effect will reload data for the new date
+  };
 
   const persist = async (override?: Partial<FormState>): Promise<void> => {
     const values = { ...form, ...override };
@@ -110,7 +118,7 @@ export function WorkDayPage() {
       if (day) {
         await workDaysService.update(day.id, cleaned);
       } else {
-        await workDaysService.create({ date: today, ...cleaned });
+        await workDaysService.create({ date: selectedDate, ...cleaned });
       }
       await refresh();
     } catch (err) {
@@ -159,7 +167,19 @@ export function WorkDayPage() {
     <div className="page">
       <div className="page__head">
         <h1 className="page__title">Ma journée</h1>
-        <p className="page__subtitle">{formatDateFr(today)}</p>
+        <p className="page__subtitle">
+          <label className="field__label" style={{ marginRight: '8px' }} htmlFor="datePicker">
+            Date
+          </label>
+          <input
+            id="datePicker"
+            type="date"
+            className="input"
+            style={{ width: 'auto', display: 'inline-block', marginRight: '8px' }}
+            value={selectedDate}
+            onChange={(event) => handleDateChange(event.target.value)}
+          />
+        </p>
       </div>
 
       {error && (
@@ -212,7 +232,7 @@ export function WorkDayPage() {
                 disabled={saving}
                 onClick={() => void persist({ entryTime: currentClock() })}
               >
-                Pointer l’entrée ({currentClock()})
+                Pointer l'entrée ({currentClock()})
               </button>
             )}
 
@@ -333,7 +353,7 @@ export function WorkDayPage() {
             </p>
           ) : (
             <ul className="history-list">
-              {history.slice(0, 7).map((item) => (
+              {history.slice(0, 30).map((item) => (
                 <li key={item.id} className="history-item">
                   <span className="history-item__date">{formatDateFr(item.date)}</span>
                   <span className="history-item__hours">

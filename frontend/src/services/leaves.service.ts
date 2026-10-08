@@ -1,7 +1,6 @@
 import { api } from './api';
 import type {
   CreateLeaveInput,
-  DecideLeaveInput,
   LeaveBalance,
   LeaveRequest,
   InitializeBalanceInput,
@@ -10,10 +9,6 @@ import type {
 export const leavesService = {
   list(): Promise<LeaveRequest[]> {
     return api<LeaveRequest[]>('/leaves');
-  },
-
-  pending(): Promise<LeaveRequest[]> {
-    return api<LeaveRequest[]>('/leaves/pending');
   },
 
   history(): Promise<LeaveRequest[]> {
@@ -27,13 +22,6 @@ export const leavesService = {
   create(input: CreateLeaveInput): Promise<LeaveRequest> {
     return api<LeaveRequest>('/leaves', {
       method: 'POST',
-      body: JSON.stringify(input),
-    });
-  },
-
-  decide(id: string, input: DecideLeaveInput): Promise<LeaveRequest> {
-    return api<LeaveRequest>(`/leaves/${id}`, {
-      method: 'PATCH',
       body: JSON.stringify(input),
     });
   },

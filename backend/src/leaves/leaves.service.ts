@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isValidObjectId, Model, Types } from 'mongoose';
+import { isValidObjectId, Model } from 'mongoose';
 import { LeaveDurationType } from '../common/enums/leave-duration-type.enum';
 import { LeaveStatus } from '../common/enums/leave-status.enum';
 import { LeaveTransactionType } from '../common/enums/leave-transaction-type.enum';
@@ -14,7 +14,6 @@ import {
   LEAVE_MONTHLY_ACCRUAL,
 } from '../config/constants';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
-import { DecideLeaveRequestDto } from './dto/decide-leave-request.dto';
 import {
   LeaveBalance,
   LeaveBalanceDocument,
@@ -59,10 +58,10 @@ export class LeavesService {
       endDate: dto.endDate,
       durationType: dto.durationType,
       durationDays,
-      status: LeaveStatus.PENDING,
+      status: LeaveStatus.APPROVED,
     });
 
-    balance.pendingDays = round2(balance.pendingDays + durationDays);
+    balance.consumedDays = round2(balance.consumedDays + durationDays);
     balance.availableDays = this.recomputeAvailable(balance);
     await balance.save();
 
@@ -82,103 +81,45 @@ export class LeavesService {
     return await this.requestModel.find({ userId }).sort({ createdAt: -1 });
   }
 
-  async findPending(): Promise<LeaveRequestDocument[]> {
-    return await this.requestModel
-      .find({ status: LeaveStatus.PENDING })
-      .sort({ createdAt: -1 });
-  }
-
-  async countPendingFor(userId: string): Promise<number> {
-    return await this.requestModel.countDocuments({
-      userId,
-      status: LeaveStatus.PENDING,
-    });
-  }
-
   async findOne(userId: string, id: string): Promise<LeaveRequestDocument> {
-    return await this.findByIdForUser(userId, id);
-  }
-
-  async decide(
-    deciderId: string,
-    id: string,
-    dto: DecideLeaveRequestDto,
-  ): Promise<LeaveRequestDocument> {
     const request = await this.findById(id);
 
-    if (request.status !== LeaveStatus.PENDING) {
-      throw new ConflictException(
-        'Seules les demandes en attente peuvent être traitées',
-      );
-    }
-
-    const balance = await this.ensureBalance(String(request.userId));
-    balance.pendingDays = Math.max(
-      0,
-      round2(balance.pendingDays - request.durationDays),
-    );
-
-    if (dto.status === LeaveStatus.APPROVED) {
-      balance.consumedDays = round2(balance.consumedDays + request.durationDays);
-    }
-
-    balance.availableDays = this.recomputeAvailable(balance);
-    await balance.save();
-
-    request.status = dto.status;
-    request.decidedBy = new Types.ObjectId(deciderId);
-    request.decidedAt = new Date();
-    if (dto.comment) {
-      request.comment = dto.comment;
-    }
-    await request.save();
-
-    await this.transactionModel.create({
-      userId: String(request.userId),
-      type: LeaveTransactionType.DECISION,
-      amount: 0,
-      reason: this.decisionReason(dto.status, dto.comment),
-      referenceId: String(request._id),
-      date: this.today(),
-    });
-
-    if (dto.status === LeaveStatus.REJECTED) {
-      await this.transactionModel.create({
-        userId: String(request.userId),
-        type: LeaveTransactionType.LEAVE_RELEASED,
-        amount: request.durationDays,
-        reason: this.decisionReason(dto.status, dto.comment),
-        referenceId: String(request._id),
-        date: this.today(),
-      });
+    if (String(request.userId) !== userId) {
+      throw new NotFoundException('Demande de congé introuvable');
     }
 
     return request;
   }
 
   async remove(userId: string, id: string): Promise<void> {
-    const request = await this.findByIdForUser(userId, id);
+    const request = await this.findById(id);
 
-    if (request.status !== LeaveStatus.PENDING) {
-      throw new ConflictException('Seules les demandes en attente peuvent être annulées');
+    if (String(request.userId) !== userId) {
+      throw new NotFoundException('Demande de congé introuvable');
     }
 
-    const balance = await this.ensureBalance(userId);
-    balance.pendingDays = Math.max(0, round2(balance.pendingDays - request.durationDays));
-    balance.availableDays = this.recomputeAvailable(balance);
-    await balance.save();
+    if (request.status === LeaveStatus.CANCELLED) {
+      throw new ConflictException('Demande déjà annulée');
+    }
+
+    if (request.status === LeaveStatus.APPROVED) {
+      const balance = await this.ensureBalance(userId);
+      balance.consumedDays = round2(balance.consumedDays - request.durationDays);
+      balance.availableDays = this.recomputeAvailable(balance);
+      await balance.save();
+
+      await this.transactionModel.create({
+        userId,
+        type: LeaveTransactionType.LEAVE_RELEASED,
+        amount: request.durationDays,
+        reason: 'Annulation de la demande',
+        referenceId: String(request._id),
+        date: this.today(),
+      });
+    }
 
     await this.requestModel.findByIdAndUpdate(String(request._id), {
       status: LeaveStatus.CANCELLED,
-    });
-
-    await this.transactionModel.create({
-      userId,
-      type: LeaveTransactionType.LEAVE_RELEASED,
-      amount: request.durationDays,
-      reason: 'Annulation de la demande',
-      referenceId: String(request._id),
-      date: this.today(),
     });
   }
 
@@ -350,25 +291,6 @@ export class LeavesService {
     }
 
     return request;
-  }
-
-  private async findByIdForUser(
-    userId: string,
-    id: string,
-  ): Promise<LeaveRequestDocument> {
-    const request = await this.findById(id);
-
-    if (String(request.userId) !== userId) {
-      throw new NotFoundException('Demande de congé introuvable');
-    }
-
-    return request;
-  }
-
-  private decisionReason(status: LeaveStatus, comment?: string): string {
-    const label =
-      status === LeaveStatus.APPROVED ? 'Demande approuvée' : 'Demande refusée';
-    return comment ? `${label} : ${comment}` : label;
   }
 
   private currentMonth(): string {

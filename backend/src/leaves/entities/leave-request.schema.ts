@@ -30,7 +30,7 @@ export class LeaveRequest {
   @Prop({ required: true, type: Number, min: 0.5 })
   durationDays: number;
 
-  @Prop({ required: true, enum: LeaveStatus, default: LeaveStatus.PENDING })
+  @Prop({ required: true, enum: LeaveStatus, default: LeaveStatus.APPROVED })
   status: LeaveStatus;
 
   @Prop({ trim: true, maxlength: 500 })

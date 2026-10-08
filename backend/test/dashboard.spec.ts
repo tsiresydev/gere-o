@@ -98,10 +98,12 @@ describe('Dashboard — API', () => {
         consumedDays: 0,
         pendingDays: 0,
         availableDays: 0,
-        pendingRequests: 0,
       });
-      expect(response.body.trends.daily).toHaveLength(14);
-      expect(response.body.trends.daily[13]).toEqual({ date: today, workedMinutes: 0 });
+      // 7 days: Monday to Sunday
+      expect(response.body.trends.daily).toHaveLength(7);
+      // Find today in the daily trends
+      const todayTrend = response.body.trends.daily.find((d: { date: string }) => d.date === today);
+      expect(todayTrend).toEqual({ date: today, workedMinutes: 0, isWeekend: false });
       expect(response.body.trends.weekly).toHaveLength(8);
       expect(response.body.trends.weekly[7]).toEqual({
         weekStart: monday,
@@ -148,10 +150,9 @@ describe('Dashboard — API', () => {
         balanceMinutes: -1920,
         recordedDays: 1,
       });
-      expect(response.body.trends.daily[13]).toEqual({
-        date: today,
-        workedMinutes: 480,
-      });
+      // Find today in the daily trends
+      const todayTrend = response.body.trends.daily.find((d: { date: string }) => d.date === today);
+      expect(todayTrend).toEqual({ date: today, workedMinutes: 480, isWeekend: false });
       expect(response.body.trends.weekly[7]).toMatchObject({ workedMinutes: 480 });
       expect(response.body.stats).toMatchObject({
         recordedDays: 1,
@@ -240,10 +241,9 @@ describe('Dashboard — API', () => {
       expect(response.body.leaves).toEqual({
         initialBalance: 10,
         accruedDays: 0,
-        consumedDays: 0,
-        pendingDays: 5,
+        consumedDays: 5,
+        pendingDays: 0,
         availableDays: 5,
-        pendingRequests: 1,
       });
     });
 
@@ -257,7 +257,6 @@ describe('Dashboard — API', () => {
       expect(response.body.week).toMatchObject({ workedMinutes: 0, recordedDays: 0 });
       expect(response.body.leaves).toMatchObject({
         availableDays: 0,
-        pendingRequests: 0,
       });
       expect(response.body.stats.recordedDays).toBe(0);
     });

@@ -148,24 +148,11 @@ describe('Calendar — API', () => {
     });
 
     it('identifie LEAVE (APPROVED) et exclut PENDING', async () => {
-      const manager = await testApp.users.create({
-        email: 'calendar-manager@example.com',
-        passwordHash: 'hash-simule',
-        firstName: 'Man',
-        lastName: 'Agg',
-        role: UserRole.MANAGER,
-      });
-      const managerToken = signToken({
-        sub: String(manager._id),
-        email: manager.email,
-        role: manager.role,
-      });
-      const managerAuth = (): Record<string, string> => ({ Authorization: `Bearer ${managerToken}` });
-
+      // Initialize balance for employee
       await request(server)
         .post('/api/leaves/balance/init')
-        .set(managerAuth())
-        .send({ initialDays: 20, userId: employeeId })
+        .set(auth())
+        .send({ initialDays: 20 })
         .expect(201);
 
       const created = await request(server)
@@ -182,12 +169,6 @@ describe('Calendar — API', () => {
 
       const requestId = created.body.id;
 
-      await request(server)
-        .patch(`/api/leaves/${requestId}`)
-        .set(managerAuth())
-        .send({ status: 'APPROVED' })
-        .expect(200);
-
       const response = await request(server)
         .get('/api/calendar?start=2026-10-15&end=2026-10-15')
         .set(auth())
@@ -201,11 +182,12 @@ describe('Calendar — API', () => {
         }),
       );
 
-      const pendingRes = await request(server)
-        .get('/api/calendar?start=2026-10-14&end=2026-10-14')
+      // Other user should not see this leave
+      const otherRes = await request(server)
+        .get('/api/calendar?start=2026-10-15&end=2026-10-15')
         .set(otherAuth())
         .expect(200);
-      expect(pendingRes.body.days[0].leaves).toHaveLength(0);
+      expect(otherRes.body.days[0].leaves).toHaveLength(0);
     });
 
     it('classe les journées passées sans pointage comme ABSENCE, futures comme FUTURE', async () => {

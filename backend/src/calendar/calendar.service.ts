@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { LeaveStatus } from '../common/enums/leave-status.enum';
 import { WorkDayStatus } from '../common/enums/work-day-status.enum';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import {
@@ -17,10 +16,6 @@ import {
 } from '../leaves/entities/leave-request.schema';
 
 const MAX_RANGE_DAYS = 92;
-const VISIBLE_LEAVE_STATUSES: LeaveStatus[] = [
-  LeaveStatus.APPROVED,
-  LeaveStatus.PENDING,
-];
 
 @Injectable()
 export class CalendarService {
@@ -41,7 +36,6 @@ export class CalendarService {
 
     const visibleLeaves = requests.filter(
       (request) =>
-        VISIBLE_LEAVE_STATUSES.includes(request.status) &&
         request.startDate <= end &&
         request.endDate >= start,
     );
@@ -133,7 +127,7 @@ export class CalendarService {
       return CalendarDayKind.WEEKEND;
     }
 
-    if (leaves.some((leave) => leave.status === LeaveStatus.APPROVED)) {
+    if (leaves.length > 0) {
       return CalendarDayKind.LEAVE;
     }
 

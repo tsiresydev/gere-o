@@ -17,7 +17,7 @@ async function bootstrap() {
 
   const existing = await usersService.findByEmail(email);
   if (existing) {
-    console.log(`User ${email} already exists`);
+    console.warn(`User ${email} already exists`);
     await app.close();
     process.exit(0);
   }
@@ -32,12 +32,12 @@ async function bootstrap() {
     role,
   });
 
-  console.log('User created successfully:');
-  console.log(`  Email: ${user.email}`);
-  console.log(`  Password: ${password}`);
-  console.log(`  Name: ${user.firstName} ${user.lastName}`);
-  console.log(`  Role: ${user.role}`);
-  console.log(`  ID: ${user._id}`);
+  console.warn('User created successfully:');
+  console.warn(`  Email: ${user.email}`);
+  console.warn(`  Password: ${password}`);
+  console.warn(`  Name: ${user.firstName} ${user.lastName}`);
+  console.warn(`  Role: ${user.role}`);
+  console.warn(`  ID: ${user._id}`);
 
   await app.close();
 }
