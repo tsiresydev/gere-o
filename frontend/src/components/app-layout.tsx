@@ -22,31 +22,24 @@ export function AppLayout() {
 
           {user && (
             <div className="app-header__user">
-              {location.pathname !== '/' && (
-                <Link to="/" className="nav-link">
-                  Ma journée
-                </Link>
-              )}
-              {location.pathname !== '/dashboard' && (
-                <Link to="/dashboard" className="nav-link">
-                  Tableau de bord
-                </Link>
-              )}
-              {location.pathname !== '/temps' && (
-                <Link to="/temps" className="nav-link">
-                  Suivi du temps
-                </Link>
-              )}
-              {location.pathname !== '/conges' && (
-                <Link to="/conges" className="nav-link">
-                  Mes congés
-                </Link>
-              )}
-              {location.pathname !== '/profil' && (
-                <Link to="/profil" className="nav-link">
-                  Mon profil
-                </Link>
-              )}
+               <Link to="/" className="nav-link" aria-current={location.pathname === '/' ? 'page' : undefined}>
+                 Ma journée
+               </Link>
+               <Link to="/dashboard" className="nav-link" aria-current={location.pathname === '/dashboard' ? 'page' : undefined}>
+                 Tableau de bord
+               </Link>
+               <Link to="/temps" className="nav-link" aria-current={location.pathname === '/temps' ? 'page' : undefined}>
+                 Suivi du temps
+               </Link>
+               <Link to="/calendrier" className="nav-link" aria-current={location.pathname === '/calendrier' ? 'page' : undefined}>
+                 Calendrier
+               </Link>
+               <Link to="/conges" className="nav-link" aria-current={location.pathname === '/conges' ? 'page' : undefined}>
+                 Mes congés
+               </Link>
+               <Link to="/profil" className="nav-link" aria-current={location.pathname === '/profil' ? 'page' : undefined}>
+                 Mon profil
+               </Link>
               <span className="app-user-name">
                 {user.firstName} {user.lastName}
               </span>
