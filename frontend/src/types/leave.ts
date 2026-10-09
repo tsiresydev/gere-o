@@ -17,6 +17,8 @@ export interface LeaveRequest {
   decidedBy?: string;
   decidedAt?: string;
   applicantName?: string;
+  validated: boolean;
+  validatedAt?: string;
 }
 
 export interface LeaveBalance {
@@ -36,6 +38,14 @@ export interface CreateLeaveInput {
   startDate: string;
   endDate: string;
   durationType: LeaveDurationType;
+}
+
+export interface UpdateLeaveInput {
+  leaveType?: LeaveType;
+  reason?: string;
+  startDate?: string;
+  endDate?: string;
+  durationType?: LeaveDurationType;
 }
 
 export interface InitializeBalanceInput {

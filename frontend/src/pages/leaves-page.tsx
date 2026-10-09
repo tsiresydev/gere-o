@@ -8,11 +8,13 @@ import type {
   LeaveBalance,
   LeaveRequest,
   InitializeBalanceInput,
+  UpdateLeaveInput,
 } from '../types/leave';
 import {
   LEAVE_DURATION_LABELS,
   LEAVE_DURATION_OPTIONS,
   LEAVE_TYPE_LABELS,
+  LEAVE_STATUS_LABELS,
 } from '../types/leave';
 import type { LeaveDurationType, LeaveType } from '../types/leave';
 import { formatDateFr, formatDays, todayISO } from '../utils/time';
@@ -44,12 +46,16 @@ export function LeavesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [validatingId, setValidatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [initModalOpen, setInitModalOpen] = useState(false);
   const [initInitialDays, setInitInitialDays] = useState<number>(20);
   const [initSubmitting, setInitSubmitting] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -62,6 +68,8 @@ export function LeavesPage() {
     setBalance(balanceData);
     setRequests(list);
     setCurrentPage(1);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
   }, []);
 
   const paginatedRequests = useMemo(() => {
@@ -108,6 +116,23 @@ export function LeavesPage() {
     setForm((previous) => ({ ...previous, [key]: value }));
   };
 
+  const handleEdit = (request: LeaveRequest): void => {
+    setEditingId(request.id);
+    setForm({
+      leaveType: request.leaveType,
+      reason: request.reason,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      durationType: request.durationType,
+    });
+    setError(null);
+  };
+
+  const handleCancelEdit = (): void => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
 
@@ -115,13 +140,18 @@ export function LeavesPage() {
     setSaving(true);
     setError(null);
 
-    leavesService
-      .create(input)
-      .then(() => refresh())
-      .then(() => setForm(EMPTY_FORM))
+    const promise = editingId
+      ? leavesService.update(editingId, input as UpdateLeaveInput)
+      : leavesService.create(input);
+
+    promise
+      .then(() => {
+        refresh();
+        handleCancelEdit();
+      })
       .catch((err: unknown) => {
         setError(
-          err instanceof ApiError ? err.message : 'Impossible d\'envoyer la demande.',
+          err instanceof ApiError ? err.message : editingId ? 'Impossible de modifier la demande.' : 'Impossible d\'enregistrer la demande.',
         );
       })
       .finally(() => {
@@ -143,6 +173,23 @@ export function LeavesPage() {
       })
       .finally(() => {
         setCancellingId(null);
+      });
+  };
+
+  const handleValidate = (id: string): void => {
+    setValidatingId(id);
+    setError(null);
+
+    leavesService
+      .validate(id)
+      .then(() => refresh())
+      .catch((err: unknown) => {
+        setError(
+          err instanceof ApiError ? err.message : 'Impossible de valider la demande.',
+        );
+      })
+      .finally(() => {
+        setValidatingId(null);
       });
   };
 
@@ -190,6 +237,8 @@ export function LeavesPage() {
       </div>
     );
   }
+
+  const submitButtonText = editingId ? 'Enregistrer les modifications' : 'Enregistrer la demande';
 
   return (
     <div className="page">
@@ -255,7 +304,16 @@ export function LeavesPage() {
       <div className="grid">
         {/* Formulaire de demande */}
         <section className="card card--form">
-          <h2 className="card__title">Nouvelle demande</h2>
+          <h2 className="card__title">{editingId ? 'Modifier la demande' : 'Nouvelle demande'}</h2>
+
+          {editingId && (
+            <div className="edit-banner">
+              <span>Mode modification — </span>
+              <button type="button" className="button button--ghost button--small" onClick={handleCancelEdit}>
+                Annuler la modification
+              </button>
+            </div>
+          )}
 
           <form className="form" onSubmit={handleSubmit} noValidate>
             {/* Type et durée - première ligne */}
@@ -417,7 +475,7 @@ export function LeavesPage() {
             </div>
 
             <button type="submit" className="button button--block button--primary" disabled={saving || !form.startDate || !form.endDate || !form.reason || !form.leaveType || !form.durationType}>
-              {saving ? 'Envoi en cours…' : 'Envoyer la demande'}
+              {saving ? 'Enregistrement…' : submitButtonText}
             </button>
 
             <p className="field__hint">
@@ -437,7 +495,7 @@ export function LeavesPage() {
             <>
               <ul className="history-list">
                 {paginatedRequests.map((request: LeaveRequest) => (
-                  <li key={request.id} className="history-item">
+                  <li key={request.id} className={`history-item ${request.status === 'CANCELLED' ? 'history-item--cancelled' : ''} ${request.validated ? 'history-item--validated' : ''}`}>
                     <span className="history-item__date">
                       {formatDateFr(request.startDate)} → {formatDateFr(request.endDate)}
                     </span>
@@ -451,15 +509,43 @@ export function LeavesPage() {
                     <span className="history-item__duration">
                       {formatDays(request.durationDays)}
                     </span>
-                    {(request.status === 'APPROVED' || request.status === 'PENDING') && (
-                      <button
-                        type="button"
-                        className="button button--ghost button--small"
-                        disabled={cancellingId === request.id}
-                        onClick={() => handleCancel(request.id)}
-                      >
-                        {cancellingId === request.id ? 'Annulation…' : 'Annuler'}
-                      </button>
+                    {request.validated && (
+                      <span className="leave-badge leave-badge--validated">
+                        Validée
+                      </span>
+                    )}
+                    {request.status === 'CANCELLED' && !request.validated && (
+                      <span className="leave-badge leave-badge--cancelled">
+                        {LEAVE_STATUS_LABELS.CANCELLED}
+                      </span>
+                    )}
+                    {!request.validated && request.status !== 'CANCELLED' && (
+                      <>
+                        <button
+                          type="button"
+                          className="button button--ghost button--small"
+                          onClick={() => handleEdit(request)}
+                          disabled={editingId !== null && editingId !== request.id}
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost button--small"
+                          disabled={cancellingId === request.id || validatingId === request.id}
+                          onClick={() => handleCancel(request.id)}
+                        >
+                          {cancellingId === request.id ? 'Annulation…' : 'Annuler'}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--primary button--small"
+                          disabled={validatingId === request.id}
+                          onClick={() => handleValidate(request.id)}
+                        >
+                          {validatingId === request.id ? 'Validation…' : 'Valider'}
+                        </button>
+                      </>
                     )}
                   </li>
                 ))}

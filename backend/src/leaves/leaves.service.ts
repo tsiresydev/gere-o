@@ -123,6 +123,37 @@ export class LeavesService {
     });
   }
 
+  async validate(userId: string, id: string): Promise<LeaveRequestDocument> {
+    const request = await this.findById(id);
+
+    if (String(request.userId) !== userId) {
+      throw new NotFoundException('Demande de congé introuvable');
+    }
+
+    if (request.validated === true) {
+      throw new ConflictException('Demande déjà validée');
+    }
+
+    if (request.status === LeaveStatus.CANCELLED) {
+      throw new ConflictException('Impossible de valider une demande annulée');
+    }
+
+    request.validated = true;
+    request.validatedAt = new Date();
+    await request.save();
+
+    await this.transactionModel.create({
+      userId,
+      type: LeaveTransactionType.DECISION,
+      amount: 0,
+      reason: 'Demande validée définitivement',
+      referenceId: String(request._id),
+      date: this.today(),
+    });
+
+    return request;
+  }
+
   async balance(userId: string): Promise<LeaveBalanceDocument> {
     return await this.ensureBalance(userId);
   }

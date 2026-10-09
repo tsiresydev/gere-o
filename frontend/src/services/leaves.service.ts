@@ -4,6 +4,7 @@ import type {
   LeaveBalance,
   LeaveRequest,
   InitializeBalanceInput,
+  UpdateLeaveInput,
 } from '../types/leave';
 
 export const leavesService = {
@@ -23,6 +24,19 @@ export const leavesService = {
     return api<LeaveRequest>('/leaves', {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  },
+
+  update(id: string, input: UpdateLeaveInput): Promise<LeaveRequest> {
+    return api<LeaveRequest>(`/leaves/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  },
+
+  validate(id: string): Promise<LeaveRequest> {
+    return api<LeaveRequest>(`/leaves/${id}/validate`, {
+      method: 'PATCH',
     });
   },
 

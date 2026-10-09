@@ -1569,3 +1569,52 @@ select.input {
     grid-column: auto;
   }
 }
+
+/* --- Edit banner --- */
+
+.edit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--color-primary);
+}
+
+/* --- Cancelled history item --- */
+
+.history-item--cancelled {
+  opacity: 0.6;
+  background: var(--color-bg);
+}
+
+.history-item--cancelled .history-item__date,
+.history-item--cancelled .history-item__reason,
+.history-item--cancelled .history-item__meta,
+.history-item--cancelled .history-item__duration {
+  color: var(--color-text-muted);
+}
+
+/* --- Validated history item --- */
+
+.history-item--validated {
+  background: #f0fdf4;
+  border-color: #15803d;
+}
+
+.history-item--validated .history-item__date,
+.history-item--validated .history-item__reason,
+.history-item--validated .history-item__meta,
+.history-item--validated .history-item__duration {
+  color: #15803d;
+}
+
+.leave-badge--validated {
+  color: #15803d;
+  background: #dcfce7;
+}

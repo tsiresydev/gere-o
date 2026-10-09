@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -65,6 +66,15 @@ export class LeavesController {
     @Param('id') id: string,
   ): Promise<LeaveRequestResponseDto> {
     const request = await this.leavesService.findOne(user.id, id);
+    return LeaveRequestResponseDto.from(request);
+  }
+
+  @Patch(':id/validate')
+  async validate(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<LeaveRequestResponseDto> {
+    const request = await this.leavesService.validate(user.id, id);
     return LeaveRequestResponseDto.from(request);
   }
 

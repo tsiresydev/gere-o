@@ -33,6 +33,9 @@ export class LeaveRequest {
   @Prop({ required: true, enum: LeaveStatus, default: LeaveStatus.APPROVED })
   status: LeaveStatus;
 
+  @Prop({ default: false })
+  validated: boolean;
+
   @Prop({ trim: true, maxlength: 500 })
   comment?: string;
 
@@ -41,6 +44,9 @@ export class LeaveRequest {
 
   @Prop()
   decidedAt?: Date;
+
+  @Prop()
+  validatedAt?: Date;
 
   createdAt?: Date;
 
