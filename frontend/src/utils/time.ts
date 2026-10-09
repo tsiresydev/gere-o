@@ -43,31 +43,6 @@ export function mondayOfWeek(isoDate: string): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function addMonths(year: number, month: number, offset: number): { year: number; month: number } {
-  const total = month - 1 + offset;
-  const shifted = new Date(Date.UTC(year, total, 1));
-  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 };
-}
-
-const MONTHS_FR = [
-  'janvier',
-  'février',
-  'mars',
-  'avril',
-  'mai',
-  'juin',
-  'juillet',
-  'août',
-  'septembre',
-  'octobre',
-  'novembre',
-  'décembre',
-] as const;
-
-export function monthLabel(year: number, month: number): string {
-  return `${MONTHS_FR[month - 1]} ${year}`;
-}
-
 export function formatDays(value: number): string {
   const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
   return `${String(rounded).replace('.', ',')} j`;

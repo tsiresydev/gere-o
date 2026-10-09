@@ -4,7 +4,6 @@ import { ProtectedRoute } from './components/protected-route';
 import { DashboardPage } from './pages/dashboard-page';
 import { CalendarPage } from './pages/calendar-page';
 import { LeavesPage } from './pages/leaves-page';
-import { OverviewPage } from './pages/overview-page';
 import { ProfilePage } from './pages/profile-page';
 import { WorkDayPage } from './pages/work-day-page';
 import { LoginPage } from './pages/login-page';
@@ -20,7 +19,6 @@ export function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<WorkDayPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/temps" element={<OverviewPage />} />
           <Route path="/calendrier" element={<CalendarPage />} />
           <Route path="/conges" element={<LeavesPage />} />
           <Route path="/profil" element={<ProfilePage />} />

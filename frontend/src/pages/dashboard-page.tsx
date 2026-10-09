@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { ApiError } from '../services/api';
 import { dashboardService } from '../services/dashboard.service';
+import { workDaysService } from '../services/work-days.service';
 import type { Dashboard } from '../types/dashboard';
+import type { WorkDay } from '../types/work-day';
 import {
   formatBalance,
   formatDateFr,
@@ -80,20 +83,30 @@ function WeekSummarySkeleton() {
 
 export function DashboardPage() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [history, setHistory] = useState<WorkDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekLoading, setWeekLoading] = useState(false);
+  const [historyFilters, setHistoryFilters] = useState<{
+    startDate?: string;
+    endDate?: string;
+  }>({});
+  const [draftFrom, setDraftFrom] = useState('');
+  const [draftTo, setDraftTo] = useState('');
 
   useEffect(() => {
     let cancelled = false;
 
-    dashboardService
-      .get(weekStart ?? undefined)
-      .then((data) => {
+    Promise.all([
+      dashboardService.get(weekStart ?? undefined),
+      workDaysService.list({ ...historyFilters, limit: 5 }),
+    ])
+      .then(([data, page]) => {
         if (!cancelled) {
           setDashboard(data);
+          setHistory(page.items);
           setError(null);
           setWeekLoading(false);
         }
@@ -117,7 +130,21 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey, weekStart]);
+  }, [reloadKey, weekStart, historyFilters]);
+
+  const applyHistoryFilters = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    setHistoryFilters({
+      startDate: draftFrom || undefined,
+      endDate: draftTo || undefined,
+    });
+  };
+
+  const clearHistoryFilters = (): void => {
+    setDraftFrom('');
+    setDraftTo('');
+    setHistoryFilters({});
+  };
 
   const retry = (): void => {
     setLoading(true);
@@ -376,6 +403,86 @@ export function DashboardPage() {
             </span>
           </div>
         </div>
+      </section>
+
+      <section className="card card--wide">
+        <div className="section-head">
+          <h2 className="section-head__title">Historique (5 journées)</h2>
+
+          <form className="filter-bar" onSubmit={applyHistoryFilters} noValidate>
+            <div className="filter-bar__field">
+              <label className="filter-bar__label" htmlFor="historyFrom">
+                Du
+              </label>
+              <input
+                id="historyFrom"
+                type="date"
+                className="input"
+                value={draftFrom}
+                onChange={(event) => setDraftFrom(event.target.value)}
+              />
+            </div>
+            <div className="filter-bar__field">
+              <label className="filter-bar__label" htmlFor="historyTo">
+                Au
+              </label>
+              <input
+                id="historyTo"
+                type="date"
+                className="input"
+                value={draftTo}
+                onChange={(event) => setDraftTo(event.target.value)}
+              />
+            </div>
+            <button type="submit" className="button button--small">
+              Appliquer
+            </button>
+            <button
+              type="button"
+              className="button button--ghost button--small"
+              onClick={clearHistoryFilters}
+            >
+              Effacer
+            </button>
+          </form>
+        </div>
+
+        {history.length === 0 ? (
+          <p className="empty-state">Aucune journée enregistrée.</p>
+        ) : (
+          <ul className="history-list">
+            {history.map((item) => (
+              <li key={item.id} className="history-item">
+                <span className="history-item__date">{formatDateFr(item.date)}</span>
+                <span className="history-item__hours">
+                  {item.entryTime ?? '--:--'} → {item.exitTime ?? '--:--'}
+                  {item.breakStart && (
+                    <span className="history-item__break">
+                      {' '}
+                      pause {item.breakStart}–{item.breakEnd ?? '?'}
+                    </span>
+                  )}
+                </span>
+                <span className="history-item__worked">
+                  {formatDuration(item.workedMinutes)}
+                </span>
+                <span
+                  className={`history-item__balance ${
+                    item.balanceMinutes > 0
+                      ? 'history-item__balance--positive'
+                      : item.balanceMinutes < 0
+                        ? 'history-item__balance--negative'
+                        : ''
+                  }`}
+                >
+                  {item.status === 'COMPLETED'
+                    ? formatBalance(item.balanceMinutes)
+                    : 'En cours'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

@@ -28,9 +28,6 @@ export function AppLayout() {
                <Link to="/dashboard" className="nav-link" aria-current={location.pathname === '/dashboard' ? 'page' : undefined}>
                  Tableau de bord
                </Link>
-               <Link to="/temps" className="nav-link" aria-current={location.pathname === '/temps' ? 'page' : undefined}>
-                 Suivi du temps
-               </Link>
                <Link to="/calendrier" className="nav-link" aria-current={location.pathname === '/calendrier' ? 'page' : undefined}>
                  Calendrier
                </Link>
