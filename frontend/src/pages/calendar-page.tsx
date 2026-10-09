@@ -205,17 +205,18 @@ export function CalendarPage() {
           ))}
         </div>
         <div className={`calendar-grid ${view === 'month' ? 'calendar-grid--month' : 'calendar-grid--week'}`}>
-          {gridDays.map((d) => {
-            const cd = calendarDaysByDate.get(d);
-            const isOtherMonth = toMonthYYYYMM(d) !== toMonthYYYYMM(reference) && view === 'month';
-            const isSelected = selectedDate === d;
-            return (
-              <button
-                key={d}
-                type="button"
-                className={`calendar-cell ${isSelected ? 'calendar-cell--selected' : ''} ${isOtherMonth ? 'calendar-cell--other' : ''}`}
-                onClick={() => setSelectedDate(d)}
-              >
+{gridDays.map((d) => {
+             const cd = calendarDaysByDate.get(d);
+             const isOtherMonth = toMonthYYYYMM(d) !== toMonthYYYYMM(reference) && view === 'month';
+             const isSelected = selectedDate === d;
+             const isLeave = cd?.kind === 'LEAVE';
+             return (
+               <button
+                 key={d}
+                 type="button"
+                 className={`calendar-cell ${isSelected ? 'calendar-cell--selected' : ''} ${isOtherMonth ? 'calendar-cell--other' : ''} ${isLeave ? 'calendar-cell--leave' : ''}`}
+                 onClick={() => setSelectedDate(d)}
+               >
                 <div className="calendar-cell__date">
                   <span className="calendar-cell__num">{new Date(`${d}T00:00:00.000Z`).getUTCDate()}</span>
                   {d === today && <span className="calendar-cell__today">Aujourd&apos;hui</span>}
