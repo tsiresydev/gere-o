@@ -4,9 +4,11 @@ services:
     runtime: node
     rootDir: backend
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start:prod
     envVars:
+      - key: NODE_VERSION
+        value: "20.19.6"
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
