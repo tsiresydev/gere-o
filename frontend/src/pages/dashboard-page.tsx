@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import { format } from 'date-fns';
+import { DateRange } from 'react-date-range';
+import type { Range, RangeKeyDict } from 'react-date-range';
 import { ApiError } from '../services/api';
 import { dashboardService } from '../services/dashboard.service';
 import { workDaysService } from '../services/work-days.service';
@@ -11,6 +13,8 @@ import {
   formatDays,
   formatDuration,
 } from '../utils/time';
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
 
 interface ChartPoint {
   key: string;
@@ -93,8 +97,8 @@ export function DashboardPage() {
     startDate?: string;
     endDate?: string;
   }>({});
-  const [draftFrom, setDraftFrom] = useState('');
-  const [draftTo, setDraftTo] = useState('');
+  const [range, setRange] = useState<Range>({ key: 'selection' });
+  const [showCalendar, setShowCalendar] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,19 +136,29 @@ export function DashboardPage() {
     };
   }, [reloadKey, weekStart, historyFilters]);
 
-  const applyHistoryFilters = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
+  const handleRangeChange = (ranges: RangeKeyDict): void => {
+    setRange(ranges.selection);
+  };
+
+  const applyHistoryFilters = (): void => {
     setHistoryFilters({
-      startDate: draftFrom || undefined,
-      endDate: draftTo || undefined,
+      startDate: range.startDate
+        ? format(range.startDate, 'yyyy-MM-dd')
+        : undefined,
+      endDate: range.endDate ? format(range.endDate, 'yyyy-MM-dd') : undefined,
     });
+    setShowCalendar(false);
   };
 
   const clearHistoryFilters = (): void => {
-    setDraftFrom('');
-    setDraftTo('');
+    setRange({ key: 'selection' });
     setHistoryFilters({});
   };
+
+  const rangeLabel =
+    range.startDate && range.endDate
+      ? `Du ${format(range.startDate, 'dd/MM/yyyy')} au ${format(range.endDate, 'dd/MM/yyyy')}`
+      : 'Sélectionner une période';
 
   const retry = (): void => {
     setLoading(true);
@@ -409,42 +423,47 @@ export function DashboardPage() {
         <div className="section-head">
           <h2 className="section-head__title">Historique (5 journées)</h2>
 
-          <form className="filter-bar" onSubmit={applyHistoryFilters} noValidate>
-            <div className="filter-bar__field">
-              <label className="filter-bar__label" htmlFor="historyFrom">
-                Du
-              </label>
-              <input
-                id="historyFrom"
-                type="date"
-                className="input"
-                value={draftFrom}
-                onChange={(event) => setDraftFrom(event.target.value)}
-              />
-            </div>
-            <div className="filter-bar__field">
-              <label className="filter-bar__label" htmlFor="historyTo">
-                Au
-              </label>
-              <input
-                id="historyTo"
-                type="date"
-                className="input"
-                value={draftTo}
-                onChange={(event) => setDraftTo(event.target.value)}
-              />
-            </div>
-            <button type="submit" className="button button--small">
-              Appliquer
-            </button>
+          <div className="date-range">
             <button
               type="button"
               className="button button--ghost button--small"
-              onClick={clearHistoryFilters}
+              onClick={() => setShowCalendar((open) => !open)}
+              aria-expanded={showCalendar}
             >
-              Effacer
+              {rangeLabel}
             </button>
-          </form>
+
+            {showCalendar && (
+              <div className="date-range__panel">
+                <DateRange
+                  ranges={[range]}
+                  onChange={handleRangeChange}
+                  months={1}
+                  direction="horizontal"
+                  weekStartsOn={1}
+                  showDateDisplay={false}
+                  moveRangeOnFirstSelection={false}
+                  rangeColors={['#2563eb']}
+                />
+                <div className="date-range__actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--small"
+                    onClick={clearHistoryFilters}
+                  >
+                    Effacer
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--small"
+                    onClick={applyHistoryFilters}
+                  >
+                    Appliquer
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {history.length === 0 ? (
