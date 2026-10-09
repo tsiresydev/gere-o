@@ -21,6 +21,8 @@ export class LeaveRequestResponseDto {
   decidedBy?: string;
   decidedAt?: string;
   applicantName?: string;
+  validated!: boolean;
+  validatedAt?: string;
 
   static from(doc: LeaveRequestDocument): LeaveRequestResponseDto {
     const dto = new LeaveRequestResponseDto();
@@ -37,6 +39,10 @@ export class LeaveRequestResponseDto {
     dto.decidedBy = stringField(doc.decidedBy);
     dto.decidedAt = doc.decidedAt
       ? new Date(doc.decidedAt).toISOString()
+      : undefined;
+    dto.validated = doc.validated ?? false;
+    dto.validatedAt = doc.validatedAt
+      ? new Date(doc.validatedAt).toISOString()
       : undefined;
     return dto;
   }
