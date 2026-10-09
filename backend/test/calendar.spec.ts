@@ -192,7 +192,12 @@ describe('Calendar — API', () => {
 
     it('classe les journées passées sans pointage comme ABSENCE, futures comme FUTURE', async () => {
       const yesterday = addDays(today, -1);
-      const tomorrow = addDays(today, 1);
+
+      // Find a future weekday (skip weekends)
+      let tomorrow = addDays(today, 1);
+      while (new Date(`${tomorrow}T00:00:00.000Z`).getUTCDay() === 0 || new Date(`${tomorrow}T00:00:00.000Z`).getUTCDay() === 6) {
+        tomorrow = addDays(tomorrow, 1);
+      }
 
       const response = await request(server)
         .get(`/api/calendar?start=${yesterday}&end=${tomorrow}`)
