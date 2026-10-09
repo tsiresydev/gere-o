@@ -3,7 +3,12 @@ import type { FormEvent } from 'react';
 import { ApiError } from '../services/api';
 import { workDaysService } from '../services/work-days.service';
 import { DEFAULT_SCHEDULE } from '../types/work-day';
-import type { DailySummary, WorkDay, WorkDayTimes } from '../types/work-day';
+import type {
+  DailySummary,
+  WeeklySummary,
+  WorkDay,
+  WorkDayTimes,
+} from '../types/work-day';
 import {
   currentClock,
   formatBalance,
@@ -35,6 +40,18 @@ function cleanTimes(values: FormState): WorkDayTimes {
   return cleaned;
 }
 
+function weekRangeOf(dateISO: string): { start: string; end: string } {
+  const date = new Date(`${dateISO}T00:00:00`);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  const format = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const start = format(date);
+  date.setDate(date.getDate() + 6);
+  return { start, end: format(date) };
+}
+
 function buildForm(current: WorkDay | null): FormState {
   return {
     entryTime: current?.entryTime ?? '',
@@ -49,6 +66,7 @@ export function WorkDayPage() {
   const [selectedDate, setSelectedDate] = useState<string>(today);
 
   const [summary, setSummary] = useState<DailySummary | null>(null);
+  const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
   const [day, setDay] = useState<WorkDay | null>(null);
   const [history, setHistory] = useState<WorkDay[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -57,14 +75,16 @@ export function WorkDayPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [page, daily] = await Promise.all([
+    const [page, daily, week] = await Promise.all([
       workDaysService.list(),
       workDaysService.dailySummary(selectedDate),
+      workDaysService.weeklySummary(weekRangeOf(selectedDate).start),
     ]);
 
     const current = page.items.find((item) => item.date === selectedDate) ?? null;
     setHistory(page.items);
     setSummary(daily);
+    setWeekly(week);
     setDay(current);
     setForm(buildForm(current));
   }, [selectedDate]);
@@ -72,14 +92,19 @@ export function WorkDayPage() {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([workDaysService.list(), workDaysService.dailySummary(selectedDate)])
-      .then(([page, daily]) => {
+    Promise.all([
+      workDaysService.list(),
+      workDaysService.dailySummary(selectedDate),
+      workDaysService.weeklySummary(weekRangeOf(selectedDate).start),
+    ])
+      .then(([page, daily, week]) => {
         if (cancelled) {
           return;
         }
         const current = page.items.find((item) => item.date === selectedDate) ?? null;
         setHistory(page.items);
         setSummary(daily);
+        setWeekly(week);
         setDay(current);
         setForm(buildForm(current));
       })
@@ -155,6 +180,15 @@ export function WorkDayPage() {
         ? 'stat-card__value--negative'
         : '';
 
+  const weeklyBalanceClass =
+    (weekly?.balanceMinutes ?? 0) > 0
+      ? 'stat-card__value--positive'
+      : (weekly?.balanceMinutes ?? 0) < 0
+        ? 'stat-card__value--negative'
+        : '';
+
+  const weekRange = weekRangeOf(selectedDate);
+
   if (loading) {
     return (
       <div className="page-loading" role="status">
@@ -206,6 +240,35 @@ export function WorkDayPage() {
           <span className={`stat-card__value ${balanceClass}`}>
             {formatBalance(summary?.balanceMinutes ?? 0)}
           </span>
+        </div>
+      </section>
+
+      <section className="card card--wide" aria-label="Résumé de la semaine">
+        <div className="section-head">
+          <h2 className="section-head__title">Semaine</h2>
+          <span className="segment-nav__label">
+            du {formatDateFr(weekRange.start)} au {formatDateFr(weekRange.end)}
+          </span>
+        </div>
+        <div className="stats-row">
+          <div className="stat-card">
+            <span className="stat-card__label">Objectif</span>
+            <span className="stat-card__value">
+              {formatDuration(weekly?.expectedMinutes ?? 0)}
+            </span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-card__label">Réalisé</span>
+            <span className="stat-card__value">
+              {formatDuration(weekly?.workedMinutes ?? 0)}
+            </span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-card__label">Solde</span>
+            <span className={`stat-card__value ${weeklyBalanceClass}`}>
+              {formatBalance(weekly?.balanceMinutes ?? 0)}
+            </span>
+          </div>
         </div>
       </section>
 
