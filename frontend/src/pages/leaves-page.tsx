@@ -12,9 +12,10 @@ import type {
 } from '../types/leave';
 import {
   LEAVE_DURATION_LABELS,
-  LEAVE_DURATION_OPTIONS,
   LEAVE_TYPE_LABELS,
   LEAVE_STATUS_LABELS,
+  START_DURATION_OPTIONS,
+  END_DURATION_OPTIONS,
 } from '../types/leave';
 import type { LeaveDurationType, LeaveType } from '../types/leave';
 import { formatDateFr, formatDays, todayISO } from '../utils/time';
@@ -24,7 +25,8 @@ interface LeaveForm {
   reason: string;
   startDate: string;
   endDate: string;
-  durationType: LeaveDurationType;
+  startDurationType: LeaveDurationType;
+  endDurationType: LeaveDurationType;
 }
 
 const EMPTY_FORM: LeaveForm = {
@@ -32,7 +34,8 @@ const EMPTY_FORM: LeaveForm = {
   reason: '',
   startDate: '',
   endDate: '',
-  durationType: 'FULL_DAY',
+  startDurationType: 'FULL_DAY',
+  endDurationType: 'FULL_DAY',
 };
 
 const ITEMS_PER_PAGE = 10;
@@ -116,6 +119,77 @@ export function LeavesPage() {
     setForm((previous) => ({ ...previous, [key]: value }));
   };
 
+  const isWeekend = (dateStr: string): boolean => {
+    const date = new Date(`${dateStr}T00:00:00.000Z`);
+    const day = date.getUTCDay();
+    return day === 0 || day === 6;
+  };
+
+  const computeDurationDays = (form: LeaveForm): number => {
+    if (!form.startDate || !form.endDate) return 0;
+    if (form.endDate < form.startDate) return 0;
+
+    if (form.startDate === form.endDate) {
+      // Une seule date : demi-journée si l'un des deux est HALF_*
+      if (
+        form.startDurationType === 'HALF_DAY_MORNING' ||
+        form.startDurationType === 'HALF_DAY_AFTERNOON' ||
+        form.endDurationType === 'HALF_DAY_MORNING' ||
+        form.endDurationType === 'HALF_DAY_AFTERNOON'
+      ) {
+        return 0.5;
+      }
+      return 1;
+    }
+
+    let total = 0;
+
+    // Jour de début
+    if (!isWeekend(form.startDate)) {
+      if (
+        form.startDurationType === 'HALF_DAY_MORNING' ||
+        form.startDurationType === 'HALF_DAY_AFTERNOON'
+      ) {
+        total += 0.5;
+      } else {
+        total += 1;
+      }
+    }
+
+    // Jour de fin
+    if (!isWeekend(form.endDate)) {
+      if (
+        form.endDurationType === 'HALF_DAY_MORNING' ||
+        form.endDurationType === 'HALF_DAY_AFTERNOON'
+      ) {
+        total += 0.5;
+      } else {
+        total += 1;
+      }
+    }
+
+    // Jours intermédiaires (exclusifs)
+    const startDate = new Date(`${form.startDate}T00:00:00.000Z`);
+    const endDate = new Date(`${form.endDate}T00:00:00.000Z`);
+    const current = new Date(startDate);
+    current.setUTCDate(current.getUTCDate() + 1);
+    const last = new Date(endDate);
+    last.setUTCDate(last.getUTCDate() - 1);
+
+    while (current <= last) {
+      const day = current.getUTCDay();
+      if (day !== 0 && day !== 6) total++;
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return total;
+  };
+
+  const handleCancelEdit = (): void => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+  };
+
   const handleEdit = (request: LeaveRequest): void => {
     setEditingId(request.id);
     setForm({
@@ -123,14 +197,10 @@ export function LeavesPage() {
       reason: request.reason,
       startDate: request.startDate,
       endDate: request.endDate,
-      durationType: request.durationType,
+      startDurationType: request.startDurationType ?? request.durationType ?? 'FULL_DAY',
+      endDurationType: request.endDurationType ?? 'FULL_DAY',
     });
     setError(null);
-  };
-
-  const handleCancelEdit = (): void => {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
@@ -338,21 +408,45 @@ export function LeavesPage() {
                   ))}
                 </select>
               </div>
+            </div>
 
+            {/* Début du congé - deuxième ligne */}
+            <div className="field-row">
               <div className="field">
-                <label className="field__label" htmlFor="durationType">
-                  Durée <span className="required" aria-hidden="true">*</span>
+                <label className="field__label" htmlFor="startDurationType">
+                  Début du congé <span className="required" aria-hidden="true">*</span>
                 </label>
                 <select
-                  id="durationType"
+                  id="startDurationType"
                   className="input"
-                  value={form.durationType}
+                  value={form.startDurationType}
                   onChange={(event) =>
-                    setField('durationType', event.target.value as LeaveDurationType)
+                    setField('startDurationType', event.target.value as LeaveDurationType)
                   }
                   required
                 >
-                  {LEAVE_DURATION_OPTIONS.map((option) => (
+                  {START_DURATION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="endDurationType">
+                  Fin du congé <span className="required" aria-hidden="true">*</span>
+                </label>
+                <select
+                  id="endDurationType"
+                  className="input"
+                  value={form.endDurationType}
+                  onChange={(event) =>
+                    setField('endDurationType', event.target.value as LeaveDurationType)
+                  }
+                  required
+                >
+                  {END_DURATION_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -360,14 +454,6 @@ export function LeavesPage() {
                 </select>
               </div>
             </div>
-
-            {/* Quick actions pour demi-journée */}
-            {form.durationType !== 'FULL_DAY' && (
-              <div className="quick-note">
-                <span className="quick-note__icon">ℹ</span>
-                <span>Pour une demi-journée, les dates de début et fin doivent être identiques.</span>
-              </div>
-            )}
 
             {/* Dates */}
             <div className="field-row">
@@ -380,7 +466,14 @@ export function LeavesPage() {
                   type="date"
                   className="input"
                   value={form.startDate}
-                  onChange={(event) => setField('startDate', event.target.value)}
+                  onChange={(event) => {
+                    const newStartDate = event.target.value;
+                    setField('startDate', newStartDate);
+                    // Si la fin est antérieure à la nouvelle début, la mettre à jour
+                    if (form.endDate && form.endDate < newStartDate) {
+                      setField('endDate', newStartDate);
+                    }
+                  }}
                   required
                   min={todayISO()}
                 />
@@ -408,50 +501,14 @@ export function LeavesPage() {
                 <div className="leave-preview__row">
                   <span className="leave-preview__label">Durée</span>
                   <span className="leave-preview__value leave-preview__value--duration">
-                    {(() => {
-                      const start = new Date(`${form.startDate}T00:00:00.000Z`);
-                      const end = new Date(`${form.endDate}T00:00:00.000Z`);
-                      if (end < start) return '—';
-                      const durationType = form.durationType;
-                      if (durationType === 'HALF_DAY_MORNING' || durationType === 'HALF_DAY_AFTERNOON') {
-                        return '0,5 jour';
-                      }
-                      let count = 0;
-                      const current = new Date(start);
-                      while (current <= end) {
-                        const day = current.getUTCDay();
-                        if (day !== 0 && day !== 6) count++;
-                        current.setUTCDate(current.getUTCDate() + 1);
-                      }
-                      return count === 1 ? '1 jour' : `${count} jours`;
-                    })()}
+                    {formatDays(computeDurationDays(form))}
                   </span>
                 </div>
                 {balance && (
                   <div className="leave-preview__row leave-preview__row--balance">
                     <span className="leave-preview__label">Solde après demande</span>
                     <span className="leave-preview__value leave-preview__value--balance">
-                      {(() => {
-                        const durationDays = (() => {
-                          const start = new Date(`${form.startDate}T00:00:00.000Z`);
-                          const end = new Date(`${form.endDate}T00:00:00.000Z`);
-                          if (end < start) return 0;
-                          const durationType = form.durationType;
-                          if (durationType === 'HALF_DAY_MORNING' || durationType === 'HALF_DAY_AFTERNOON') {
-                            return 0.5;
-                          }
-                          let count = 0;
-                          const current = new Date(start);
-                          while (current <= end) {
-                            const day = current.getUTCDay();
-                            if (day !== 0 && day !== 6) count++;
-                            current.setUTCDate(current.getUTCDate() + 1);
-                          }
-                          return count;
-                        })();
-                        const remaining = balance.availableDays - durationDays;
-                        return formatDays(remaining);
-                      })()}
+                      {formatDays(balance.availableDays - computeDurationDays(form))}
                     </span>
                   </div>
                 )}
@@ -474,7 +531,7 @@ export function LeavesPage() {
               />
             </div>
 
-            <button type="submit" className="button button--block button--primary" disabled={saving || !form.startDate || !form.endDate || !form.reason || !form.leaveType || !form.durationType}>
+            <button type="submit" className="button button--block button--primary" disabled={saving || !form.startDate || !form.endDate || !form.reason || !form.leaveType || !form.startDurationType || !form.endDurationType}>
               {saving ? 'Enregistrement…' : submitButtonText}
             </button>
 
@@ -504,7 +561,8 @@ export function LeavesPage() {
                     </span>
                     <span className="history-item__meta">
                       {LEAVE_TYPE_LABELS[request.leaveType]} ·{' '}
-                      {LEAVE_DURATION_LABELS[request.durationType]}
+                      {request.startDurationType ? LEAVE_DURATION_LABELS[request.startDurationType] : LEAVE_DURATION_LABELS[request.durationType]} →{' '}
+                      {request.endDurationType ? LEAVE_DURATION_LABELS[request.endDurationType] : LEAVE_DURATION_LABELS[request.durationType]}
                     </span>
                     <span className="history-item__duration">
                       {formatDays(request.durationDays)}

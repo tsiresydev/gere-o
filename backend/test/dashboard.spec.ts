@@ -229,7 +229,8 @@ describe('Dashboard — API', () => {
           reason: 'Vacances dashboard',
           startDate: addDays(monday, 7),
           endDate: addDays(monday, 11),
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(201);
 

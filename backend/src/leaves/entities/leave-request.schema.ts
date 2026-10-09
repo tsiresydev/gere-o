@@ -48,6 +48,12 @@ export class LeaveRequest {
   @Prop()
   validatedAt?: Date;
 
+  @Prop({ enum: LeaveDurationType, default: LeaveDurationType.FULL_DAY })
+  startDurationType?: LeaveDurationType;
+
+  @Prop({ enum: LeaveDurationType, default: LeaveDurationType.FULL_DAY })
+  endDurationType?: LeaveDurationType;
+
   createdAt?: Date;
 
   updatedAt?: Date;

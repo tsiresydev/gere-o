@@ -1,17 +1,8 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { UpdateLeaveRequestDto } from './dto/update-leave-request.dto';
 import { InitializeBalanceDto } from './dto/initialize-balance.dto';
 import { LeaveBalanceResponseDto,
   LeaveRequestResponseDto,
@@ -30,6 +21,16 @@ export class LeavesController {
     @Body() dto: CreateLeaveRequestDto,
   ): Promise<LeaveRequestResponseDto> {
     const request = await this.leavesService.create(user.id, dto);
+    return LeaveRequestResponseDto.from(request);
+  }
+
+  @Patch(':id')
+  async update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateLeaveRequestDto,
+  ): Promise<LeaveRequestResponseDto> {
+    const request = await this.leavesService.update(user.id, id, dto);
     return LeaveRequestResponseDto.from(request);
   }
 

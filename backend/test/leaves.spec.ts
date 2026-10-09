@@ -180,7 +180,8 @@ describe('Leaves — API', () => {
           reason: 'Vacances d’hiver',
           startDate: '2026-01-09',
           endDate: '2026-01-12',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(201);
 
@@ -189,7 +190,6 @@ describe('Leaves — API', () => {
         reason: 'Vacances d’hiver',
         startDate: '2026-01-09',
         endDate: '2026-01-12',
-        durationType: 'FULL_DAY',
         durationDays: 2,
         status: 'APPROVED',
       });
@@ -205,7 +205,8 @@ describe('Leaves — API', () => {
           reason: 'Demi-journée',
           startDate: '2026-01-12',
           endDate: '2026-01-12',
-          durationType: 'HALF_DAY_MORNING',
+          startDurationType: 'HALF_DAY_MORNING',
+          endDurationType: 'HALF_DAY_MORNING',
         })
         .expect(201);
 
@@ -213,29 +214,45 @@ describe('Leaves — API', () => {
       expect(res.body.durationDays).toBe(0.5);
     });
 
-    it('met à jour le solde (consommé déduit du montant disponible)', async () => {
-      const balance = await request(server).get('/api/leaves/balance').set(auth()).expect(200);
-      // After balance init with 15, then 2 requests: 2 + 0.5 = 2.5 consumed
-      expect(balance.body.consumedDays).toBe(2.5);
-      expect(balance.body.availableDays).toBeCloseTo(12.5, 2);
-    });
-
-    it('refuse un congé d’une demi-journée sur plusieurs dates (400)', async () => {
+    it('crée une demande avec demi-journée en fin (201)', async () => {
       const res = await request(server)
         .post('/api/leaves')
         .set(auth())
         .send({
           leaveType: 'PAID',
-          reason: 'Test',
-          startDate: '2026-01-12',
-          endDate: '2026-01-13',
-          durationType: 'HALF_DAY_AFTERNOON',
+          reason: 'Demi-journée en fin',
+          startDate: '2026-01-13',
+          endDate: '2026-01-14',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'HALF_DAY_MORNING',
         })
-        .expect(400);
+        .expect(201);
 
-      expect(res.body.message).toBe(
-        "Un congé d'une demi-journée doit porter sur une seule date",
-      );
+      expect(res.body.durationDays).toBe(1.5);
+    });
+
+    it('crée une demande avec demi-journée en début (201)', async () => {
+      const res = await request(server)
+        .post('/api/leaves')
+        .set(auth())
+        .send({
+          leaveType: 'PAID',
+          reason: 'Demi-journée en début',
+          startDate: '2026-01-13',
+          endDate: '2026-01-14',
+          startDurationType: 'HALF_DAY_AFTERNOON',
+          endDurationType: 'FULL_DAY',
+        })
+        .expect(201);
+
+      expect(res.body.durationDays).toBe(1.5);
+    });
+
+    it('met à jour le solde (consommé déduit du montant disponible)', async () => {
+      const balance = await request(server).get('/api/leaves/balance').set(auth()).expect(200);
+      // After balance init with 15, then 5 requests: 2 + 0.5 + 1.5 + 1.5 = 5.5 consumed
+      expect(balance.body.consumedDays).toBeCloseTo(5.5, 2);
+      expect(balance.body.availableDays).toBeCloseTo(9.5, 2);
     });
 
     it('refuse une fin antérieure au début (400)', async () => {
@@ -247,7 +264,8 @@ describe('Leaves — API', () => {
           reason: 'Test',
           startDate: '2026-01-13',
           endDate: '2026-01-12',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(400);
 
@@ -265,7 +283,8 @@ describe('Leaves — API', () => {
           reason: 'Week-end',
           startDate: '2026-01-10',
           endDate: '2026-01-11',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(400);
 
@@ -288,7 +307,8 @@ describe('Leaves — API', () => {
           reason: 'Long congé',
           startDate: '2026-03-02',
           endDate: '2026-03-31',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(400);
 
@@ -306,7 +326,8 @@ describe('Leaves — API', () => {
           reason: 'Test',
           startDate: '2026-01-12',
           endDate: '2026-01-12',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(400);
 
@@ -324,7 +345,8 @@ describe('Leaves — API', () => {
           reason: 'Permission du mardi',
           startDate: '2026-01-13',
           endDate: '2026-01-13',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(201);
 
@@ -336,14 +358,14 @@ describe('Leaves — API', () => {
     it('liste les demandes de l’utilisateur, de la plus récente à la plus ancienne', async () => {
       const res = await request(server).get('/api/leaves').set(auth()).expect(200);
 
-      expect(res.body).toHaveLength(2);
+      expect(res.body).toHaveLength(4);
       expect(res.body.every((leave: { status: string }) => leave.status === 'APPROVED')).toBe(true);
-      expect(res.body[0].startDate).toBe('2026-01-12');
+      expect(res.body[0].startDate).toBe('2026-01-13');
     });
 
     it('expose le même historique via /history', async () => {
       const res = await request(server).get('/api/leaves/history').set(auth()).expect(200);
-      expect(res.body).toHaveLength(2);
+      expect(res.body).toHaveLength(4);
     });
 
     it('retrouve une demande par identifiant', async () => {
@@ -387,9 +409,9 @@ describe('Leaves — API', () => {
       expect(res.body.status).toBe('CANCELLED');
 
       const balance = await request(server).get('/api/leaves/balance').set(auth()).expect(200);
-      // Was 2.5 consumed, cancel 2-day request -> 0.5 consumed
-      expect(balance.body.consumedDays).toBeCloseTo(0.5, 2);
-      expect(balance.body.availableDays).toBeCloseTo(14.5, 2);
+      // Was 5.5 consumed, cancel 2-day request -> 3.5 consumed
+      expect(balance.body.consumedDays).toBeCloseTo(3.5, 2);
+      expect(balance.body.availableDays).toBeCloseTo(11.5, 2);
     });
 
     it('refuse d’annuler une demande déjà annulée (409)', async () => {
@@ -428,7 +450,8 @@ describe('Leaves — API', () => {
           reason: 'Test',
           startDate: '2026-01-12',
           endDate: '2026-01-12',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
           hacked: true,
         })
         .expect(400);

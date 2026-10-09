@@ -3,8 +3,9 @@ import { LeaveDurationType } from '../../common/enums/leave-duration-type.enum';
 import { LeaveType } from '../../common/enums/leave-type.enum';
 import { DATE_PATTERN } from '../../config/constants';
 
-export class CreateLeaveRequestDto {
+export class UpdateLeaveRequestDto {
   @IsEnum(LeaveType, { message: 'leaveType invalide' })
+  @IsNotEmpty()
   leaveType: LeaveType;
 
   @IsString()
@@ -13,9 +14,11 @@ export class CreateLeaveRequestDto {
   reason: string;
 
   @Matches(DATE_PATTERN, { message: 'startDate doit être au format YYYY-MM-DD' })
+  @IsNotEmpty()
   startDate: string;
 
   @Matches(DATE_PATTERN, { message: 'endDate doit être au format YYYY-MM-DD' })
+  @IsNotEmpty()
   endDate: string;
 
   @IsEnum(LeaveDurationType, { message: 'startDurationType invalide' })

@@ -23,6 +23,8 @@ export class LeaveRequestResponseDto {
   applicantName?: string;
   validated!: boolean;
   validatedAt?: string;
+  startDurationType?: LeaveDurationType;
+  endDurationType?: LeaveDurationType;
 
   static from(doc: LeaveRequestDocument): LeaveRequestResponseDto {
     const dto = new LeaveRequestResponseDto();
@@ -44,6 +46,8 @@ export class LeaveRequestResponseDto {
     dto.validatedAt = doc.validatedAt
       ? new Date(doc.validatedAt).toISOString()
       : undefined;
+    dto.startDurationType = doc.startDurationType ?? LeaveDurationType.FULL_DAY;
+    dto.endDurationType = doc.endDurationType ?? LeaveDurationType.FULL_DAY;
     return dto;
   }
 }

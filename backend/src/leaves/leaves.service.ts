@@ -14,6 +14,7 @@ import {
   LEAVE_MONTHLY_ACCRUAL,
 } from '../config/constants';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { UpdateLeaveRequestDto } from './dto/update-leave-request.dto';
 import {
   LeaveBalance,
   LeaveBalanceDocument,
@@ -43,7 +44,9 @@ export class LeavesService {
 
   async create(userId: string, dto: CreateLeaveRequestDto): Promise<LeaveRequestDocument> {
     this.assertValidRequest(dto);
-    const durationDays = this.computeDurationDays(dto.startDate, dto.endDate, dto.durationType);
+    const startDurationType = dto.startDurationType ?? LeaveDurationType.FULL_DAY;
+    const endDurationType = dto.endDurationType ?? LeaveDurationType.FULL_DAY;
+    const durationDays = this.computeDurationDays(dto.startDate, dto.endDate, startDurationType, endDurationType);
 
     const balance = await this.ensureBalance(userId);
     if (balance.availableDays < durationDays - 1e-9) {
@@ -56,7 +59,9 @@ export class LeavesService {
       reason: dto.reason,
       startDate: dto.startDate,
       endDate: dto.endDate,
-      durationType: dto.durationType,
+      durationType: startDurationType,
+      startDurationType,
+      endDurationType,
       durationDays,
       status: LeaveStatus.APPROVED,
     });
@@ -75,6 +80,71 @@ export class LeavesService {
     });
 
     return request;
+  }
+
+  async update(userId: string, id: string, dto: UpdateLeaveRequestDto): Promise<LeaveRequestDocument> {
+    const request = await this.findById(id);
+
+    if (String(request.userId) !== userId) {
+      throw new NotFoundException('Demande de congé introuvable');
+    }
+
+    if (request.validated === true) {
+      throw new ConflictException('Impossible de modifier une demande validée');
+    }
+
+    if (request.status === LeaveStatus.CANCELLED) {
+      throw new ConflictException('Impossible de modifier une demande annulée');
+    }
+
+    const oldDurationDays = request.durationDays;
+
+    const startDurationType = dto.startDurationType ?? LeaveDurationType.FULL_DAY;
+    const endDurationType = dto.endDurationType ?? LeaveDurationType.FULL_DAY;
+    const newDurationDays = this.computeDurationDays(dto.startDate, dto.endDate, startDurationType, endDurationType);
+
+    const balance = await this.ensureBalance(userId);
+    const delta = round2(newDurationDays - oldDurationDays);
+
+    if (delta > 0 && balance.availableDays < delta - 1e-9) {
+      throw new BadRequestException('Solde de congés insuffisant');
+    }
+
+    const updated = await this.requestModel.findByIdAndUpdate(
+      String(request._id),
+      {
+        leaveType: dto.leaveType,
+        reason: dto.reason,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        durationType: startDurationType,
+        startDurationType,
+        endDurationType,
+        durationDays: newDurationDays,
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Demande de congé introuvable');
+    }
+
+    if (delta !== 0) {
+      balance.consumedDays = round2(balance.consumedDays + delta);
+      balance.availableDays = this.recomputeAvailable(balance);
+      await balance.save();
+
+      await this.transactionModel.create({
+        userId,
+        type: LeaveTransactionType.LEAVE_TAKEN,
+        amount: -delta,
+        reason: dto.reason,
+        referenceId: String(request._id),
+        date: this.today(),
+      });
+    }
+
+    return updated;
   }
 
   async findAll(userId: string): Promise<LeaveRequestDocument[]> {
@@ -266,29 +336,100 @@ export class LeavesService {
         'La date de fin doit être postérieure ou égale à la date de début',
       );
     }
-
-    if (
-      dto.durationType !== LeaveDurationType.FULL_DAY &&
-      dto.startDate !== dto.endDate
-    ) {
-      throw new BadRequestException(
-        "Un congé d'une demi-journée doit porter sur une seule date",
-      );
-    }
   }
 
   private computeDurationDays(
     startDate: string,
     endDate: string,
-    durationType: LeaveDurationType,
+    startDurationType: LeaveDurationType = LeaveDurationType.FULL_DAY,
+    endDurationType: LeaveDurationType = LeaveDurationType.FULL_DAY,
   ): number {
-    if (durationType === LeaveDurationType.HALF_DAY_MORNING) {
-      return 0.5;
+    // Si startDate = endDate, on ne compte qu'une seule demi-journée ou journée complète
+    if (startDate === endDate) {
+      // Si l'une des deux est une demi-journée, c'est 0.5 jour
+      if (
+        startDurationType === LeaveDurationType.HALF_DAY_MORNING ||
+        startDurationType === LeaveDurationType.HALF_DAY_AFTERNOON ||
+        endDurationType === LeaveDurationType.HALF_DAY_MORNING ||
+        endDurationType === LeaveDurationType.HALF_DAY_AFTERNOON
+      ) {
+        return 0.5;
+      }
+      // Sinon c'est une journée complète
+      return 1;
     }
-    if (durationType === LeaveDurationType.HALF_DAY_AFTERNOON) {
-      return 0.5;
+
+    // Période multi-jours
+    let total = 0;
+
+    // Jour de début (vérifier si c'est un week-end)
+    const startDay = this.getDayOfWeek(startDate);
+    if (startDay === 0 || startDay === 6) {
+      // Week-end, pas de congé compté pour le début
+      // Mais on compte les jours intermédiaires normalement
+    } else if (
+      startDurationType === LeaveDurationType.HALF_DAY_MORNING ||
+      startDurationType === LeaveDurationType.HALF_DAY_AFTERNOON
+    ) {
+      total += 0.5;
+    } else {
+      total += 1;
     }
-    return this.countBusinessDays(startDate, endDate);
+
+    // Jour de fin (vérifier si c'est un week-end)
+    const endDay = this.getDayOfWeek(endDate);
+    if (endDay === 0 || endDay === 6) {
+      // Week-end, pas de congé compté pour la fin
+    } else if (
+      endDurationType === LeaveDurationType.HALF_DAY_MORNING ||
+      endDurationType === LeaveDurationType.HALF_DAY_AFTERNOON
+    ) {
+      total += 0.5;
+    } else {
+      total += 1;
+    }
+
+    // Jours intermédiaires (exclusifs)
+    if (this.isDateAfter(startDate, endDate)) {
+      // startDate < endDate, on compte les jours entre exclusifs
+      total += this.countBusinessDaysExclusive(startDate, endDate);
+    }
+
+    if (total === 0) {
+      throw new BadRequestException('Aucun jour ouvré dans cette période');
+    }
+
+    return total;
+  }
+
+  private isDateAfter(date1: string, date2: string): boolean {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    return d1 < d2;
+  }
+
+  private getDayOfWeek(dateStr: string): number {
+    const date = new Date(`${dateStr}T00:00:00.000Z`);
+    return date.getUTCDay();
+  }
+
+  private countBusinessDaysExclusive(start: string, end: string): number {
+    // Compte les jours ouvrés entre start (exclusif) et end (exclusif)
+    let count = 0;
+    const current = new Date(`${start}T00:00:00.000Z`);
+    current.setUTCDate(current.getUTCDate() + 1); // Commencer au jour après start
+    const last = new Date(`${end}T00:00:00.000Z`);
+    last.setUTCDate(last.getUTCDate() - 1); // Finir au jour avant end
+
+    while (current <= last) {
+      const day = current.getUTCDay();
+      if (day !== 0 && day !== 6) {
+        count++;
+      }
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return count;
   }
 
   private countBusinessDays(start: string, end: string): number {

@@ -19,6 +19,8 @@ export interface LeaveRequest {
   applicantName?: string;
   validated: boolean;
   validatedAt?: string;
+  startDurationType?: LeaveDurationType;
+  endDurationType?: LeaveDurationType;
 }
 
 export interface LeaveBalance {
@@ -37,7 +39,9 @@ export interface CreateLeaveInput {
   reason: string;
   startDate: string;
   endDate: string;
-  durationType: LeaveDurationType;
+  durationType?: LeaveDurationType;
+  startDurationType?: LeaveDurationType;
+  endDurationType?: LeaveDurationType;
 }
 
 export interface UpdateLeaveInput {
@@ -46,6 +50,8 @@ export interface UpdateLeaveInput {
   startDate?: string;
   endDate?: string;
   durationType?: LeaveDurationType;
+  startDurationType?: LeaveDurationType;
+  endDurationType?: LeaveDurationType;
 }
 
 export interface InitializeBalanceInput {
@@ -72,6 +78,18 @@ export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
 };
 
 export const LEAVE_DURATION_OPTIONS: { value: LeaveDurationType; label: string }[] = [
+  { value: 'FULL_DAY', label: LEAVE_DURATION_LABELS.FULL_DAY },
+  { value: 'HALF_DAY_MORNING', label: LEAVE_DURATION_LABELS.HALF_DAY_MORNING },
+  { value: 'HALF_DAY_AFTERNOON', label: LEAVE_DURATION_LABELS.HALF_DAY_AFTERNOON },
+];
+
+export const START_DURATION_OPTIONS: { value: LeaveDurationType; label: string }[] = [
+  { value: 'FULL_DAY', label: LEAVE_DURATION_LABELS.FULL_DAY },
+  { value: 'HALF_DAY_MORNING', label: LEAVE_DURATION_LABELS.HALF_DAY_MORNING },
+  { value: 'HALF_DAY_AFTERNOON', label: LEAVE_DURATION_LABELS.HALF_DAY_AFTERNOON },
+];
+
+export const END_DURATION_OPTIONS: { value: LeaveDurationType; label: string }[] = [
   { value: 'FULL_DAY', label: LEAVE_DURATION_LABELS.FULL_DAY },
   { value: 'HALF_DAY_MORNING', label: LEAVE_DURATION_LABELS.HALF_DAY_MORNING },
   { value: 'HALF_DAY_AFTERNOON', label: LEAVE_DURATION_LABELS.HALF_DAY_AFTERNOON },

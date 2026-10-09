@@ -163,7 +163,8 @@ describe('Calendar — API', () => {
           reason: 'Calendrier E2E',
           startDate: '2026-10-15',
           endDate: '2026-10-15',
-          durationType: 'FULL_DAY',
+          startDurationType: 'FULL_DAY',
+          endDurationType: 'FULL_DAY',
         })
         .expect(201);
 
