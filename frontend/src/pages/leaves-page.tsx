@@ -63,6 +63,11 @@ export function LeavesPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Filter state
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [filterReason, setFilterReason] = useState<string>('');
+
   const refresh = useCallback(async () => {
     const [balanceData, list] = await Promise.all([
       leavesService.balance(),
@@ -75,13 +80,22 @@ export function LeavesPage() {
     setForm(EMPTY_FORM);
   }, []);
 
+  const filteredRequests = useMemo(() => {
+    return requests.filter(req => {
+      const matchesStart = !filterStartDate || req.startDate >= filterStartDate;
+      const matchesEnd = !filterEndDate || req.endDate <= filterEndDate;
+      const matchesReason = !filterReason || req.reason.toLowerCase().includes(filterReason.toLowerCase());
+      return matchesStart && matchesEnd && matchesReason;
+    });
+  }, [requests, filterStartDate, filterEndDate, filterReason]);
+
   const paginatedRequests = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     const end = start + ITEMS_PER_PAGE;
-    return requests.slice(start, end);
-  }, [requests, currentPage]);
+    return filteredRequests.slice(start, end);
+  }, [filteredRequests, currentPage]);
 
-  const totalPages = useMemo(() => Math.ceil(requests.length / ITEMS_PER_PAGE), [requests.length]);
+  const totalPages = useMemo(() => Math.ceil(filteredRequests.length / ITEMS_PER_PAGE), [filteredRequests.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +275,28 @@ export function LeavesPage() {
       .finally(() => {
         setValidatingId(null);
       });
+  };
+
+  const handleFilterStartChange = (date: string) => {
+    setFilterStartDate(date);
+    setCurrentPage(1);
+  };
+
+  const handleFilterEndChange = (date: string) => {
+    setFilterEndDate(date);
+    setCurrentPage(1);
+  };
+
+  const handleFilterReasonChange = (value: string) => {
+    setFilterReason(value);
+    setCurrentPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setFilterStartDate('');
+    setFilterEndDate('');
+    setFilterReason('');
+    setCurrentPage(1);
   };
 
   const handleOpenInitModal = (): void => {
@@ -546,7 +582,44 @@ export function LeavesPage() {
         <section className="card card--history">
           <h2 className="card__title">Historique des demandes</h2>
 
-          {requests.length === 0 ? (
+          {/* Filtres */}
+          <div className="filter-bar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '16px' }}>
+            <div className="field" style={{ flex: '1', minWidth: '150px' }}>
+              <label className="field__label">Date de début</label>
+              <input
+                type="date"
+                className="input"
+                value={filterStartDate}
+                onChange={(e) => handleFilterStartChange(e.target.value)}
+              />
+            </div>
+            <div className="field" style={{ flex: '1', minWidth: '150px' }}>
+              <label className="field__label">Date de fin</label>
+              <input
+                type="date"
+                className="input"
+                value={filterEndDate}
+                onChange={(e) => handleFilterEndChange(e.target.value)}
+              />
+            </div>
+            <div className="field" style={{ flex: '1', minWidth: '200px' }}>
+              <label className="field__label">Motif</label>
+              <input
+                type="text"
+                className="input"
+                placeholder="Rechercher par motif..."
+                value={filterReason}
+                onChange={(e) => handleFilterReasonChange(e.target.value)}
+              />
+            </div>
+            {(filterStartDate || filterEndDate || filterReason) && (
+              <button type="button" className="button button--ghost" onClick={handleClearFilters} style={{ height: 'fit-content' }}>
+                Effacer les filtres
+              </button>
+            )}
+          </div>
+
+          {filteredRequests.length === 0 ? (
             <p className="empty-state">Aucune demande pour le moment.</p>
           ) : (
             <>
