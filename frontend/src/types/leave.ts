@@ -1,5 +1,5 @@
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export type LeaveType = 'PAID' | 'UNPAID';
+export type LeaveType = 'PAID' | 'UNPAID' | 'HOLIDAY';
 export type LeaveDurationType = 'FULL_DAY' | 'HALF_DAY_MORNING' | 'HALF_DAY_AFTERNOON';
 export type LeaveDecision = Extract<LeaveStatus, 'APPROVED' | 'REJECTED'>;
 
@@ -62,6 +62,7 @@ export interface InitializeBalanceInput {
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   PAID: 'Payé',
   UNPAID: 'Non payé',
+  HOLIDAY: 'Jour férié',
 };
 
 export const LEAVE_DURATION_LABELS: Record<LeaveDurationType, string> = {

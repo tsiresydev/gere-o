@@ -1,8 +1,9 @@
 export interface CalendarDayLeave {
   id: string;
-  leaveType: 'PAID' | 'UNPAID' | 'RTT' | 'SICK' | 'OTHER';
+  leaveType: 'PAID' | 'UNPAID' | 'RTT' | 'SICK' | 'OTHER' | 'HOLIDAY';
   durationType: 'FULL_DAY' | 'MORNING' | 'AFTERNOON' | 'HOURLY';
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  reason: string;
 }
 
 export interface CalendarDayWorkDay {
@@ -18,7 +19,7 @@ export interface CalendarDayWorkDay {
 export interface CalendarDay {
   date: string;
   isWeekend: boolean;
-  kind: 'WORKED' | 'LEAVE' | 'ABSENCE' | 'FUTURE' | 'WEEKEND';
+  kind: 'WORKED' | 'LEAVE' | 'HOLIDAY' | 'ABSENCE' | 'FUTURE' | 'WEEKEND';
   workDay: CalendarDayWorkDay | null;
   leaves: CalendarDayLeave[];
 }

@@ -42,6 +42,7 @@ function buildWeekGrid(weekIso: string): string[] {
 function getKindLabel(kind: CalendarDay['kind']): string {
   if (kind === 'WORKED') return 'Travaillé';
   if (kind === 'LEAVE') return 'Congé';
+  if (kind === 'HOLIDAY') return 'Férié';
   if (kind === 'ABSENCE') return 'Absent';
   if (kind === 'FUTURE') return 'Futur';
   if (kind === 'WEEKEND') return 'Week-end';
@@ -51,6 +52,7 @@ function getKindLabel(kind: CalendarDay['kind']): string {
 function kindClass(kind: CalendarDay['kind']): string {
   if (kind === 'WORKED') return 'badge--ok';
   if (kind === 'LEAVE') return 'badge--warning';
+  if (kind === 'HOLIDAY') return 'badge--holiday';
   if (kind === 'ABSENCE') return 'badge--danger';
   if (kind === 'FUTURE') return 'badge--neutral';
   if (kind === 'WEEKEND') return 'badge--neutral';
@@ -204,17 +206,18 @@ export function CalendarPage() {
             </div>
           ))}
         </div>
-        <div className={`calendar-grid ${view === 'month' ? 'calendar-grid--month' : 'calendar-grid--week'}`}>
+<div className={`calendar-grid ${view === 'month' ? 'calendar-grid--month' : 'calendar-grid--week'}`}>
 {gridDays.map((d) => {
              const cd = calendarDaysByDate.get(d);
              const isOtherMonth = toMonthYYYYMM(d) !== toMonthYYYYMM(reference) && view === 'month';
              const isSelected = selectedDate === d;
              const isLeave = cd?.kind === 'LEAVE';
+             const isHoliday = cd?.kind === 'HOLIDAY';
              return (
                <button
                  key={d}
                  type="button"
-                 className={`calendar-cell ${isSelected ? 'calendar-cell--selected' : ''} ${isOtherMonth ? 'calendar-cell--other' : ''} ${isLeave ? 'calendar-cell--leave' : ''}`}
+                 className={`calendar-cell ${isSelected ? 'calendar-cell--selected' : ''} ${isOtherMonth ? 'calendar-cell--other' : ''} ${isLeave ? 'calendar-cell--leave' : ''} ${isHoliday ? 'calendar-cell--holiday' : ''}`}
                  onClick={() => setSelectedDate(d)}
                >
                 <div className="calendar-cell__date">
@@ -275,8 +278,17 @@ export function CalendarPage() {
                 <ul className="detail-list">
                   {selected.leaves.map((l) => (
                     <li key={l.id}>
-                      <span>{l.leaveType} • {l.durationType}</span>
-                      <span className="badge">{l.status}</span>
+                      {l.leaveType === 'HOLIDAY' ? (
+                        <>
+                          <span className="badge badge--holiday">Férié</span>
+                          <span className="muted" style={{ marginLeft: '8px' }}>{l.reason}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>{l.leaveType} • {l.durationType}</span>
+                          <span className="badge">{l.status}</span>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>

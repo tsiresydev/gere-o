@@ -1,6 +1,7 @@
 export enum CalendarDayKind {
   WORKED = 'WORKED',
   LEAVE = 'LEAVE',
+  HOLIDAY = 'HOLIDAY',
   ABSENCE = 'ABSENCE',
   FUTURE = 'FUTURE',
   WEEKEND = 'WEEKEND',
@@ -21,6 +22,7 @@ export interface CalendarLeaveInfo {
   leaveType: string;
   durationType: string;
   status: string;
+  reason: string;
 }
 
 export interface CalendarDay {

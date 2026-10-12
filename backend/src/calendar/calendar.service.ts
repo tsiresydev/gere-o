@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { WorkDayStatus } from '../common/enums/work-day-status.enum';
+import { LeaveType } from '../common/enums/leave-type.enum';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import {
   CalendarDay,
@@ -114,6 +115,7 @@ export class CalendarService {
         leaveType: request.leaveType,
         durationType: request.durationType,
         status: request.status,
+        reason: request.reason,
       }));
   }
 
@@ -125,6 +127,12 @@ export class CalendarService {
   ): CalendarDayKind {
     if (this.isWeekend(date)) {
       return CalendarDayKind.WEEKEND;
+    }
+
+    // Check for HOLIDAY type leaves first
+    const hasHoliday = leaves.some((leave) => leave.leaveType === LeaveType.HOLIDAY);
+    if (hasHoliday) {
+      return CalendarDayKind.HOLIDAY;
     }
 
     if (leaves.length > 0) {

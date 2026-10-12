@@ -199,6 +199,8 @@ export function LeavesPage() {
     return total;
   };
 
+  const isHoliday = (leaveType: LeaveType): boolean => leaveType === 'HOLIDAY';
+
   const handleCancelEdit = (): void => {
     setEditingId(null);
     setForm(EMPTY_FORM);
@@ -540,11 +542,19 @@ export function LeavesPage() {
                     {formatDays(computeDurationDays(form))}
                   </span>
                 </div>
-                {balance && (
+                {balance && !isHoliday(form.leaveType) && (
                   <div className="leave-preview__row leave-preview__row--balance">
                     <span className="leave-preview__label">Solde après demande</span>
                     <span className="leave-preview__value leave-preview__value--balance">
                       {formatDays(balance.availableDays - computeDurationDays(form))}
+                    </span>
+                  </div>
+                )}
+                {balance && isHoliday(form.leaveType) && (
+                  <div className="leave-preview__row leave-preview__row--balance leave-preview__row--holiday">
+                    <span className="leave-preview__label">Impact sur le solde</span>
+                    <span className="leave-preview__value leave-preview__value--balance leave-preview__value--holiday">
+                      Aucun (jour férié non déductible)
                     </span>
                   </div>
                 )}
@@ -574,6 +584,7 @@ export function LeavesPage() {
             <p className="field__hint">
               Les samedis et dimanches ne sont pas comptabilisés. La demande est
               automatiquement approuvée et déduite de votre solde.
+              {form.leaveType === 'HOLIDAY' && ' Les jours fériés ne sont pas déduits du solde.'}
             </p>
           </form>
         </section>
@@ -624,62 +635,90 @@ export function LeavesPage() {
           ) : (
             <>
               <ul className="history-list">
-                {paginatedRequests.map((request: LeaveRequest) => (
-                  <li key={request.id} className={`history-item ${request.status === 'CANCELLED' ? 'history-item--cancelled' : ''} ${request.validated ? 'history-item--validated' : ''}`}>
-                    <span className="history-item__date">
-                      {formatDateFr(request.startDate)} → {formatDateFr(request.endDate)}
-                    </span>
-                    <span className="history-item__reason">
-                      {request.reason}
-                    </span>
-                    <span className="history-item__meta">
-                      {LEAVE_TYPE_LABELS[request.leaveType]} ·{' '}
-                      {request.startDurationType ? LEAVE_DURATION_LABELS[request.startDurationType] : LEAVE_DURATION_LABELS[request.durationType]} →{' '}
-                      {request.endDurationType ? LEAVE_DURATION_LABELS[request.endDurationType] : LEAVE_DURATION_LABELS[request.durationType]}
-                    </span>
-                    <span className="history-item__duration">
-                      {formatDays(request.durationDays)}
-                    </span>
-                    {request.validated && (
-                      <span className="leave-badge leave-badge--validated">
-                        Validée
+                {paginatedRequests.map((request: LeaveRequest) => {
+                  const holiday = isHoliday(request.leaveType);
+                  return (
+                    <li key={request.id} className={`history-item ${request.status === 'CANCELLED' ? 'history-item--cancelled' : ''} ${request.validated ? 'history-item--validated' : ''} ${holiday ? 'history-item--holiday' : ''}`}>
+                      <span className="history-item__date">
+                        {formatDateFr(request.startDate)} → {formatDateFr(request.endDate)}
                       </span>
-                    )}
-                    {request.status === 'CANCELLED' && !request.validated && (
-                      <span className="leave-badge leave-badge--cancelled">
-                        {LEAVE_STATUS_LABELS.CANCELLED}
+                      <span className="history-item__reason">
+                        {request.reason}
                       </span>
-                    )}
-                    {!request.validated && request.status !== 'CANCELLED' && (
-                      <>
-                        <button
-                          type="button"
-                          className="button button--ghost button--small"
-                          onClick={() => handleEdit(request)}
-                          disabled={editingId !== null && editingId !== request.id}
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          type="button"
-                          className="button button--ghost button--small"
-                          disabled={cancellingId === request.id || validatingId === request.id}
-                          onClick={() => handleCancel(request.id)}
-                        >
-                          {cancellingId === request.id ? 'Annulation…' : 'Annuler'}
-                        </button>
-                        <button
-                          type="button"
-                          className="button button--primary button--small"
-                          disabled={validatingId === request.id}
-                          onClick={() => handleValidate(request.id)}
-                        >
-                          {validatingId === request.id ? 'Validation…' : 'Valider'}
-                        </button>
-                      </>
-                    )}
-                  </li>
-                ))}
+                      <span className="history-item__meta">
+                        {LEAVE_TYPE_LABELS[request.leaveType]} ·{' '}
+                        {request.startDurationType ? LEAVE_DURATION_LABELS[request.startDurationType] : LEAVE_DURATION_LABELS[request.durationType]} →{' '}
+                        {request.endDurationType ? LEAVE_DURATION_LABELS[request.endDurationType] : LEAVE_DURATION_LABELS[request.durationType]}
+                      </span>
+                      <span className="history-item__duration">
+                        {formatDays(request.durationDays)}
+                      </span>
+                      {holiday && (
+                        <span className="leave-badge leave-badge--holiday">
+                          Jour férié
+                        </span>
+                      )}
+                      {request.validated && !holiday && (
+                        <span className="leave-badge leave-badge--validated">
+                          Validée
+                        </span>
+                      )}
+                      {request.status === 'CANCELLED' && !request.validated && (
+                        <span className="leave-badge leave-badge--cancelled">
+                          {LEAVE_STATUS_LABELS.CANCELLED}
+                        </span>
+                      )}
+                      {!request.validated && request.status !== 'CANCELLED' && !holiday && (
+                        <>
+                          <button
+                            type="button"
+                            className="button button--ghost button--small"
+                            onClick={() => handleEdit(request)}
+                            disabled={editingId !== null && editingId !== request.id}
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--small"
+                            disabled={cancellingId === request.id || validatingId === request.id}
+                            onClick={() => handleCancel(request.id)}
+                          >
+                            {cancellingId === request.id ? 'Annulation…' : 'Annuler'}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--primary button--small"
+                            disabled={validatingId === request.id}
+                            onClick={() => handleValidate(request.id)}
+                          >
+                            {validatingId === request.id ? 'Validation…' : 'Valider'}
+                          </button>
+                        </>
+                      )}
+                      {holiday && !request.validated && request.status !== 'CANCELLED' && (
+                        <>
+                          <button
+                            type="button"
+                            className="button button--ghost button--small"
+                            onClick={() => handleEdit(request)}
+                            disabled={editingId !== null && editingId !== request.id}
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--small"
+                            disabled={cancellingId === request.id}
+                            onClick={() => handleCancel(request.id)}
+                          >
+                            {cancellingId === request.id ? 'Annulation…' : 'Annuler'}
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
 
               {totalPages > 1 && (

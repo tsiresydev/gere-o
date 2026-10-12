@@ -9,6 +9,7 @@ import { isValidObjectId, Model } from 'mongoose';
 import { LeaveDurationType } from '../common/enums/leave-duration-type.enum';
 import { LeaveStatus } from '../common/enums/leave-status.enum';
 import { LeaveTransactionType } from '../common/enums/leave-transaction-type.enum';
+import { LeaveType } from '../common/enums/leave-type.enum';
 import {
   DEFAULT_LEAVE_INITIAL_BALANCE,
   LEAVE_MONTHLY_ACCRUAL,
@@ -48,9 +49,13 @@ export class LeavesService {
     const endDurationType = dto.endDurationType ?? LeaveDurationType.FULL_DAY;
     const durationDays = this.computeDurationDays(dto.startDate, dto.endDate, startDurationType, endDurationType);
 
-    const balance = await this.ensureBalance(userId);
-    if (balance.availableDays < durationDays - 1e-9) {
-      throw new BadRequestException('Solde de congés insuffisant');
+    const isHoliday = dto.leaveType === LeaveType.HOLIDAY;
+
+    if (!isHoliday) {
+      const balance = await this.ensureBalance(userId);
+      if (balance.availableDays < durationDays - 1e-9) {
+        throw new BadRequestException('Solde de congés insuffisant');
+      }
     }
 
     const request = await this.requestModel.create({
@@ -66,18 +71,31 @@ export class LeavesService {
       status: LeaveStatus.APPROVED,
     });
 
-    balance.consumedDays = round2(balance.consumedDays + durationDays);
-    balance.availableDays = this.recomputeAvailable(balance);
-    await balance.save();
+    if (!isHoliday) {
+      const balance = await this.ensureBalance(userId);
+      balance.consumedDays = round2(balance.consumedDays + durationDays);
+      balance.availableDays = this.recomputeAvailable(balance);
+      await balance.save();
 
-    await this.transactionModel.create({
-      userId,
-      type: LeaveTransactionType.LEAVE_TAKEN,
-      amount: -durationDays,
-      reason: dto.reason,
-      referenceId: String(request._id),
-      date: this.today(),
-    });
+      await this.transactionModel.create({
+        userId,
+        type: LeaveTransactionType.LEAVE_TAKEN,
+        amount: -durationDays,
+        reason: dto.reason,
+        referenceId: String(request._id),
+        date: this.today(),
+      });
+    } else {
+      // For holidays, just record a transaction for history tracking without affecting balance
+      await this.transactionModel.create({
+        userId,
+        type: LeaveTransactionType.LEAVE_TAKEN,
+        amount: 0,
+        reason: `[Férié] ${dto.reason}`,
+        referenceId: String(request._id),
+        date: this.today(),
+      });
+    }
 
     return request;
   }
@@ -97,17 +115,20 @@ export class LeavesService {
       throw new ConflictException('Impossible de modifier une demande annulée');
     }
 
+    const isHoliday = request.leaveType === LeaveType.HOLIDAY || dto.leaveType === LeaveType.HOLIDAY;
     const oldDurationDays = request.durationDays;
 
     const startDurationType = dto.startDurationType ?? LeaveDurationType.FULL_DAY;
     const endDurationType = dto.endDurationType ?? LeaveDurationType.FULL_DAY;
     const newDurationDays = this.computeDurationDays(dto.startDate, dto.endDate, startDurationType, endDurationType);
 
-    const balance = await this.ensureBalance(userId);
-    const delta = round2(newDurationDays - oldDurationDays);
+    if (!isHoliday) {
+      const balance = await this.ensureBalance(userId);
+      const delta = round2(newDurationDays - oldDurationDays);
 
-    if (delta > 0 && balance.availableDays < delta - 1e-9) {
-      throw new BadRequestException('Solde de congés insuffisant');
+      if (delta > 0 && balance.availableDays < delta - 1e-9) {
+        throw new BadRequestException('Solde de congés insuffisant');
+      }
     }
 
     const updated = await this.requestModel.findByIdAndUpdate(
@@ -129,16 +150,30 @@ export class LeavesService {
       throw new NotFoundException('Demande de congé introuvable');
     }
 
-    if (delta !== 0) {
-      balance.consumedDays = round2(balance.consumedDays + delta);
-      balance.availableDays = this.recomputeAvailable(balance);
-      await balance.save();
+    if (!isHoliday) {
+      const delta = round2(newDurationDays - oldDurationDays);
+      if (delta !== 0) {
+        const balance = await this.ensureBalance(userId);
+        balance.consumedDays = round2(balance.consumedDays + delta);
+        balance.availableDays = this.recomputeAvailable(balance);
+        await balance.save();
 
+        await this.transactionModel.create({
+          userId,
+          type: LeaveTransactionType.LEAVE_TAKEN,
+          amount: -delta,
+          reason: dto.reason ?? request.reason,
+          referenceId: String(request._id),
+          date: this.today(),
+        });
+      }
+    } else {
+      // For holidays, just record a transaction for history tracking
       await this.transactionModel.create({
         userId,
         type: LeaveTransactionType.LEAVE_TAKEN,
-        amount: -delta,
-        reason: dto.reason,
+        amount: 0,
+        reason: `[Férié] ${dto.reason ?? request.reason}`,
         referenceId: String(request._id),
         date: this.today(),
       });
@@ -172,7 +207,9 @@ export class LeavesService {
       throw new ConflictException('Demande déjà annulée');
     }
 
-    if (request.status === LeaveStatus.APPROVED) {
+    const isHoliday = request.leaveType === LeaveType.HOLIDAY;
+
+    if (request.status === LeaveStatus.APPROVED && !isHoliday) {
       const balance = await this.ensureBalance(userId);
       balance.consumedDays = round2(balance.consumedDays - request.durationDays);
       balance.availableDays = this.recomputeAvailable(balance);
@@ -183,6 +220,16 @@ export class LeavesService {
         type: LeaveTransactionType.LEAVE_RELEASED,
         amount: request.durationDays,
         reason: 'Annulation de la demande',
+        referenceId: String(request._id),
+        date: this.today(),
+      });
+    } else if (isHoliday) {
+      // For holidays, just record a transaction for history tracking
+      await this.transactionModel.create({
+        userId,
+        type: LeaveTransactionType.LEAVE_TAKEN,
+        amount: 0,
+        reason: `[Férié] Annulation: ${request.reason}`,
         referenceId: String(request._id),
         date: this.today(),
       });
