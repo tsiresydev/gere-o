@@ -658,7 +658,7 @@ export function LeavesPage() {
                           Jour férié
                         </span>
                       )}
-                      {request.validated && !holiday && (
+                      {request.validated && (
                         <span className="leave-badge leave-badge--validated">
                           Validée
                         </span>
@@ -713,6 +713,14 @@ export function LeavesPage() {
                             onClick={() => handleCancel(request.id)}
                           >
                             {cancellingId === request.id ? 'Annulation…' : 'Annuler'}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--primary button--small"
+                            disabled={validatingId === request.id}
+                            onClick={() => handleValidate(request.id)}
+                          >
+                            {validatingId === request.id ? 'Validation…' : 'Valider'}
                           </button>
                         </>
                       )}
