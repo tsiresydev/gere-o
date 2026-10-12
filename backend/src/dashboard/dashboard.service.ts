@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { WorkDayStatus } from '../common/enums/work-day-status.enum';
+import { LeaveType } from '../common/enums/leave-type.enum';
 import {
   DEFAULT_EXPECTED_MINUTES,
   DEFAULT_WEEKLY_EXPECTED_MINUTES,
@@ -15,6 +16,7 @@ import {
   WeeklyTrendPoint,
 } from './dto/dashboard-response.dto';
 import { WorkDay, WorkDayDocument } from '../work-days/entities/work-day.schema';
+import { LeaveRequest, LeaveRequestDocument } from '../leaves/entities/leave-request.schema';
 
 const WEEKLY_TREND_WEEKS = 8;
 const STATS_WINDOW_DAYS = 30;
@@ -24,6 +26,8 @@ export class DashboardService {
   constructor(
     @InjectModel(WorkDay.name)
     private readonly workDayModel: Model<WorkDayDocument>,
+    @InjectModel(LeaveRequest.name)
+    private readonly requestModel: Model<LeaveRequestDocument>,
     private readonly leavesService: LeavesService,
   ) {}
 
@@ -38,10 +42,15 @@ export class DashboardService {
     const statsStart = this.toISODate(this.addDays(this.parseISODate(today), -(STATS_WINDOW_DAYS - 1)));
     const rangeStart = trendStart < statsStart ? trendStart : statsStart;
 
-    const [days, balance] = await Promise.all([
+    const [days, balance, leaveRequests] = await Promise.all([
       this.workDayModel.find({ userId, date: { $gte: rangeStart, $lte: today } }),
       this.leavesService.balance(userId),
+      this.requestModel.find({ userId }),
     ]);
+
+    // Calculate monthly leave stats (current month)
+    const currentMonth = this.currentMonth();
+    const { consumedThisMonth, holidaysThisMonth } = this.calculateMonthlyLeaveStats(leaveRequests, currentMonth);
 
     const weekDays = days.filter((day) => day.date >= weekStartStr && day.date <= weekEnd);
     const weekWorkedMinutes = weekDays
@@ -73,7 +82,7 @@ export class DashboardService {
         recordedDays: weekDays.filter((day) => day.status === WorkDayStatus.COMPLETED)
           .length,
       },
-      leaves: this.leaveIndicators(balance),
+      leaves: this.leaveIndicators(balance, consumedThisMonth, holidaysThisMonth),
       trends: {
         daily: this.dailyTrend(days, weekStartStr, weekEnd),
         weekly: this.weeklyTrend(days, monday),
@@ -90,14 +99,139 @@ export class DashboardService {
       pendingDays: number;
       availableDays: number;
     },
+    consumedThisMonth: number,
+    holidaysThisMonth: number,
   ): DashboardLeaveIndicators {
     return {
       initialBalance: balance.initialBalance,
       accruedDays: balance.accruedDays,
       consumedDays: balance.consumedDays,
+      consumedThisMonth,
+      holidaysThisMonth,
       pendingDays: balance.pendingDays,
       availableDays: balance.availableDays,
     };
+  }
+
+  private calculateMonthlyLeaveStats(
+    requests: LeaveRequestDocument[],
+    month: string, // YYYY-MM format
+  ): { consumedThisMonth: number; holidaysThisMonth: number } {
+    const monthStart = `${month}-01`;
+    const [year, monthNum] = month.split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
+    const monthEnd = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+
+    let consumedThisMonth = 0;
+    let holidaysThisMonth = 0;
+
+    for (const request of requests) {
+      // Skip cancelled requests
+      if (request.status === 'CANCELLED') continue;
+
+      // Check if the request overlaps with the current month
+      const requestStart = request.startDate;
+      const requestEnd = request.endDate;
+
+      if (requestEnd < monthStart || requestStart > monthEnd) {
+        continue; // No overlap
+      }
+
+      // Calculate overlap days
+      const overlapStart = requestStart > monthStart ? requestStart : monthStart;
+      const overlapEnd = requestEnd < monthEnd ? requestEnd : monthEnd;
+
+      // Use the request's durationDays as a proportion, or compute based on overlap
+      // For simplicity, we'll compute the duration for the overlapping period
+      const overlapDuration = this.computeDurationDays(
+        overlapStart,
+        overlapEnd,
+        request.startDurationType ?? request.durationType,
+        request.endDurationType ?? request.durationType,
+      );
+
+      if (request.leaveType === LeaveType.HOLIDAY) {
+        holidaysThisMonth += overlapDuration;
+      } else {
+        consumedThisMonth += overlapDuration;
+      }
+    }
+
+    return { consumedThisMonth, holidaysThisMonth };
+  }
+
+  private computeDurationDays(
+    startDate: string,
+    endDate: string,
+    startDurationType: 'FULL_DAY' | 'HALF_DAY_MORNING' | 'HALF_DAY_AFTERNOON' = 'FULL_DAY',
+    endDurationType: 'FULL_DAY' | 'HALF_DAY_MORNING' | 'HALF_DAY_AFTERNOON' = 'FULL_DAY',
+  ): number {
+    if (startDate === endDate) {
+      if (
+        startDurationType === 'HALF_DAY_MORNING' ||
+        startDurationType === 'HALF_DAY_AFTERNOON' ||
+        endDurationType === 'HALF_DAY_MORNING' ||
+        endDurationType === 'HALF_DAY_AFTERNOON'
+      ) {
+        return 0.5;
+      }
+      return 1;
+    }
+
+    let total = 0;
+    const startDay = this.getDayOfWeek(startDate);
+    if (startDay !== 0 && startDay !== 6) {
+      if (startDurationType === 'HALF_DAY_MORNING' || startDurationType === 'HALF_DAY_AFTERNOON') {
+        total += 0.5;
+      } else {
+        total += 1;
+      }
+    }
+
+    const endDay = this.getDayOfWeek(endDate);
+    if (endDay !== 0 && endDay !== 6) {
+      if (endDurationType === 'HALF_DAY_MORNING' || endDurationType === 'HALF_DAY_AFTERNOON') {
+        total += 0.5;
+      } else {
+        total += 1;
+      }
+    }
+
+    if (this.isDateAfter(startDate, endDate)) {
+      total += this.countBusinessDaysExclusive(startDate, endDate);
+    }
+
+    return total;
+  }
+
+  private isDateAfter(date1: string, date2: string): boolean {
+    return new Date(date1) < new Date(date2);
+  }
+
+  private getDayOfWeek(dateStr: string): number {
+    const date = new Date(`${dateStr}T00:00:00.000Z`);
+    return date.getUTCDay();
+  }
+
+  private countBusinessDaysExclusive(start: string, end: string): number {
+    let count = 0;
+    const current = new Date(`${start}T00:00:00.000Z`);
+    current.setUTCDate(current.getUTCDate() + 1);
+    const last = new Date(`${end}T00:00:00.000Z`);
+    last.setUTCDate(last.getUTCDate() - 1);
+
+    while (current <= last) {
+      const day = current.getUTCDay();
+      if (day !== 0 && day !== 6) count++;
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return count;
+  }
+
+  private currentMonth(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
   private dailyTrend(days: WorkDayDocument[], weekStart: string, weekEnd: string): DailyTrendPoint[] {

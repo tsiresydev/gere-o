@@ -19,6 +19,8 @@ export interface DashboardLeaves {
   initialBalance: number;
   accruedDays: number;
   consumedDays: number;
+  consumedThisMonth: number;
+  holidaysThisMonth: number;
   pendingDays: number;
   availableDays: number;
 }

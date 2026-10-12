@@ -276,8 +276,8 @@ export function DashboardPage() {
           <span className="stat-card__label">Solde de congés</span>
           <span className="stat-card__value">{formatDays(leaves.availableDays)}</span>
           <span className="card__note">
-            {formatDays(leaves.consumedDays)} consommés ·{' '}
-            {formatDays(leaves.accruedDays)} acquis
+            {formatDays(leaves.consumedThisMonth)} consommés ce mois ·{' '}
+            {formatDays(leaves.holidaysThisMonth)} férié{leaves.holidaysThisMonth > 1 ? 's' : ''} ce mois
           </span>
         </div>
       </section>
