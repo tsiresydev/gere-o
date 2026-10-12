@@ -3,19 +3,8 @@ import type { FormEvent } from 'react';
 import { ApiError } from '../services/api';
 import { workDaysService } from '../services/work-days.service';
 import { DEFAULT_SCHEDULE } from '../types/work-day';
-import type {
-  DailySummary,
-  WeeklySummary,
-  WorkDay,
-  WorkDayTimes,
-} from '../types/work-day';
-import {
-  currentClock,
-  formatBalance,
-  formatDateFr,
-  formatDuration,
-  todayISO,
-} from '../utils/time';
+import type { DailySummary, WeeklySummary, WorkDay, WorkDayTimes } from '../types/work-day';
+import { currentClock, formatBalance, formatDateFr, formatDuration, todayISO } from '../utils/time';
 
 interface FormState {
   entryTime: string;
@@ -82,7 +71,11 @@ export function WorkDayPage() {
     ]);
 
     const current = page.items.find((item) => item.date === selectedDate) ?? null;
-    setHistory(page.items);
+    const weekRange = weekRangeOf(selectedDate);
+    const weeklyHistory = page.items.filter(
+      (item) => item.date >= weekRange.start && item.date <= weekRange.end,
+    );
+    setHistory(weeklyHistory);
     setSummary(daily);
     setWeekly(week);
     setDay(current);
@@ -102,7 +95,11 @@ export function WorkDayPage() {
           return;
         }
         const current = page.items.find((item) => item.date === selectedDate) ?? null;
-        setHistory(page.items);
+        const weekRange = weekRangeOf(selectedDate);
+        const weeklyHistory = page.items.filter(
+          (item) => item.date >= weekRange.start && item.date <= weekRange.end,
+        );
+        setHistory(weeklyHistory);
         setSummary(daily);
         setWeekly(week);
         setDay(current);
@@ -110,9 +107,7 @@ export function WorkDayPage() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(
-            err instanceof ApiError ? err.message : 'Impossible de charger la journée.',
-          );
+          setError(err instanceof ApiError ? err.message : 'Impossible de charger la journée.');
         }
       })
       .finally(() => {
@@ -147,9 +142,7 @@ export function WorkDayPage() {
       }
       await refresh();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'Enregistrement impossible.',
-      );
+      setError(err instanceof ApiError ? err.message : 'Enregistrement impossible.');
     } finally {
       setSaving(false);
     }
@@ -231,9 +224,7 @@ export function WorkDayPage() {
         </div>
         <div className="stat-card">
           <span className="stat-card__label">Réalisé</span>
-          <span className="stat-card__value">
-            {formatDuration(summary?.workedMinutes ?? 0)}
-          </span>
+          <span className="stat-card__value">{formatDuration(summary?.workedMinutes ?? 0)}</span>
         </div>
         <div className="stat-card">
           <span className="stat-card__label">Solde</span>
@@ -253,15 +244,11 @@ export function WorkDayPage() {
         <div className="stats-row">
           <div className="stat-card">
             <span className="stat-card__label">Objectif</span>
-            <span className="stat-card__value">
-              {formatDuration(weekly?.expectedMinutes ?? 0)}
-            </span>
+            <span className="stat-card__value">{formatDuration(weekly?.expectedMinutes ?? 0)}</span>
           </div>
           <div className="stat-card">
             <span className="stat-card__label">Réalisé</span>
-            <span className="stat-card__value">
-              {formatDuration(weekly?.workedMinutes ?? 0)}
-            </span>
+            <span className="stat-card__value">{formatDuration(weekly?.workedMinutes ?? 0)}</span>
           </div>
           <div className="stat-card">
             <span className="stat-card__label">Solde</span>
@@ -408,15 +395,18 @@ export function WorkDayPage() {
         </section>
 
         <section className="card card--wide">
-          <h2 className="card__title">Historique</h2>
+          <h2 className="card__title">
+            Historique de la semaine &#160;
+            <span className="card__note" style={{ fontSize: '13px', fontWeight: 'normal' }}>
+              du {formatDateFr(weekRange.start)} au {formatDateFr(weekRange.end)}
+            </span>
+          </h2>
 
           {history.length === 0 ? (
-            <p className="empty-state">
-              Aucune journée enregistrée. Commencez par pointer votre entrée.
-            </p>
+            <p className="empty-state">Aucune journée enregistrée cette semaine.</p>
           ) : (
             <ul className="history-list">
-              {history.slice(0, 30).map((item) => (
+              {history.map((item) => (
                 <li key={item.id} className="history-item">
                   <span className="history-item__date">{formatDateFr(item.date)}</span>
                   <span className="history-item__hours">
@@ -428,9 +418,7 @@ export function WorkDayPage() {
                       </span>
                     )}
                   </span>
-                  <span className="history-item__worked">
-                    {formatDuration(item.workedMinutes)}
-                  </span>
+                  <span className="history-item__worked">{formatDuration(item.workedMinutes)}</span>
                   <span
                     className={`history-item__balance ${
                       item.balanceMinutes > 0
@@ -440,9 +428,7 @@ export function WorkDayPage() {
                           : ''
                     }`}
                   >
-                    {item.status === 'COMPLETED'
-                      ? formatBalance(item.balanceMinutes)
-                      : 'En cours'}
+                    {item.status === 'COMPLETED' ? formatBalance(item.balanceMinutes) : 'En cours'}
                   </span>
                 </li>
               ))}
