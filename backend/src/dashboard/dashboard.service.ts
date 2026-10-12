@@ -52,6 +52,9 @@ export class DashboardService {
     const currentMonth = this.currentMonth();
     const { consumedThisMonth, holidaysThisMonth } = this.calculateMonthlyLeaveStats(leaveRequests, currentMonth);
 
+    // Calculate worked days this month (completed work days in current month)
+    const workedDaysThisMonth = this.calculateWorkedDaysThisMonth(days, currentMonth);
+
     const weekDays = days.filter((day) => day.date >= weekStartStr && day.date <= weekEnd);
     const weekWorkedMinutes = weekDays
       .filter((day) => day.status === WorkDayStatus.COMPLETED)
@@ -82,7 +85,7 @@ export class DashboardService {
         recordedDays: weekDays.filter((day) => day.status === WorkDayStatus.COMPLETED)
           .length,
       },
-      leaves: this.leaveIndicators(balance, consumedThisMonth, holidaysThisMonth),
+      leaves: this.leaveIndicators(balance, consumedThisMonth, holidaysThisMonth, workedDaysThisMonth),
       trends: {
         daily: this.dailyTrend(days, weekStartStr, weekEnd),
         weekly: this.weeklyTrend(days, monday),
@@ -101,6 +104,7 @@ export class DashboardService {
     },
     consumedThisMonth: number,
     holidaysThisMonth: number,
+    workedDaysThisMonth: number,
   ): DashboardLeaveIndicators {
     return {
       initialBalance: balance.initialBalance,
@@ -108,6 +112,7 @@ export class DashboardService {
       consumedDays: balance.consumedDays,
       consumedThisMonth,
       holidaysThisMonth,
+      workedDaysThisMonth,
       pendingDays: balance.pendingDays,
       availableDays: balance.availableDays,
     };
@@ -158,6 +163,31 @@ export class DashboardService {
     }
 
     return { consumedThisMonth, holidaysThisMonth };
+  }
+
+  private calculateWorkedDaysThisMonth(
+    days: { date: string; status: string }[],
+    month: string, // YYYY-MM format
+  ): number {
+    const monthStart = `${month}-01`;
+    const [year, monthNum] = month.split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
+    const monthEnd = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+
+    let workedDays = 0;
+
+    for (const day of days) {
+      if (day.status !== WorkDayStatus.COMPLETED) continue;
+      if (day.date < monthStart || day.date > monthEnd) continue;
+
+      // Check if it's a weekday (Mon-Fri)
+      const dayOfWeek = this.getDayOfWeek(day.date);
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
+
+      workedDays += 1;
+    }
+
+    return workedDays;
   }
 
   private computeDurationDays(

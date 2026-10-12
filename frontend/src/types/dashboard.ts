@@ -21,6 +21,7 @@ export interface DashboardLeaves {
   consumedDays: number;
   consumedThisMonth: number;
   holidaysThisMonth: number;
+  workedDaysThisMonth: number;
   pendingDays: number;
   availableDays: number;
 }

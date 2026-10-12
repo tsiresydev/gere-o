@@ -280,6 +280,14 @@ export function DashboardPage() {
             {formatDays(leaves.holidaysThisMonth)} férié{leaves.holidaysThisMonth > 1 ? 's' : ''} ce mois
           </span>
         </div>
+
+        <div className="stat-card">
+          <span className="stat-card__label">Jours travaillés ce mois</span>
+          <span className="stat-card__value">{formatDays(leaves.workedDaysThisMonth)}</span>
+          <span className="card__note">
+            (hors fériés et congés)
+          </span>
+        </div>
       </section>
 
       <section className="card card--wide">
