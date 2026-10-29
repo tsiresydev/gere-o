@@ -66,6 +66,6 @@ export interface MonthlySummary {
 export const DEFAULT_SCHEDULE: WorkDayTimes = {
   entryTime: '08:45',
   breakStart: '13:00',
-  breakEnd: '14:00',
+  breakEnd: '13:30',
   exitTime: '17:45',
 };

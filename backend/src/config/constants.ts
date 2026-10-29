@@ -9,7 +9,7 @@ export const DEFAULT_EXPECTED_MINUTES = 480;
 export const DEFAULT_WEEKLY_EXPECTED_MINUTES = 2400;
 export const DEFAULT_ENTRY_TIME = '08:45';
 export const DEFAULT_BREAK_START = '13:00';
-export const DEFAULT_BREAK_END = '14:00';
+export const DEFAULT_BREAK_END = '13:30';
 
 export const LEAVE_MONTHLY_ACCRUAL = 2.08;
 export const DEFAULT_LEAVE_INITIAL_BALANCE = 0;
