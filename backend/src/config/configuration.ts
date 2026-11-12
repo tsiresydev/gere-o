@@ -24,5 +24,11 @@ export default (): Record<string, unknown> => {
       .split(',')
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),
+    smtpHost: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+    smtpPort: Number(process.env.SMTP_PORT ?? 587),
+    smtpUser: process.env.SMTP_USER ?? '',
+    smtpPassword: process.env.SMTP_PASSWORD ?? '',
+    smtpFrom: process.env.SMTP_FROM ?? 'tsiresy.madasoftware@gmail.com',
+    emailReportBcc: process.env.EMAIL_REPORT_BCC ?? 'tsiresyrabekoto@gmail.com',
   };
 };

@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { EmailModule } from './email/email.module';
 import { LeavesModule } from './leaves/leaves.module';
 import { UsersModule } from './users/users.module';
 import { WorkDaysModule } from './work-days/work-days.module';
@@ -27,6 +28,7 @@ import configuration from './config/configuration';
     LeavesModule,
     DashboardModule,
     CalendarModule,
+    EmailModule,
   ],
 })
 export class AppModule {}
