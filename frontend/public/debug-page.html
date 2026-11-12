@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Aperçu de démonstration</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #f1f5f9;
+      }
+      iframe {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const path = params.get('path') || 'dashboard';
+      if (token) {
+        localStorage.setItem('gere-o.accessToken', token);
+      }
+      const frame = document.createElement('iframe');
+      frame.src = `/${path}`;
+      frame.title = 'Aperçu Gere-o';
+      document.body.appendChild(frame);
+    </script>
+  </body>
+</html>

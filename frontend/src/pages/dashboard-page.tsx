@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { format } from 'date-fns';
 import { DateRange } from 'react-date-range';
 import type { Range, RangeKeyDict } from 'react-date-range';
@@ -23,15 +24,89 @@ interface ChartPoint {
   value: number;
   objective: number;
   isWeekend?: boolean;
+  isActive?: boolean;
 }
 
-function balanceClass(value: number): string {
-  if (value > 0) {
-    return 'stat-card__value--positive';
+type IconName =
+  | 'sun'
+  | 'week'
+  | 'calendar'
+  | 'spark'
+  | 'refresh'
+  | 'chevron-left'
+  | 'chevron-right';
+
+const WEEKDAY_LABELS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+
+function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+
+  switch (name) {
+    case 'sun':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </svg>
+      );
+    case 'week':
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+        </svg>
+      );
+    case 'calendar':
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+        </svg>
+      );
+    case 'spark':
+      return (
+        <svg {...common}>
+          <path d="M3 17l5-6 4 3 7-9" />
+          <path d="M15 5h4v4" />
+        </svg>
+      );
+    case 'refresh':
+      return (
+        <svg {...common}>
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <path d="M21 3v6h-6" />
+        </svg>
+      );
+    case 'chevron-left':
+      return (
+        <svg {...common}>
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      );
+    case 'chevron-right':
+      return (
+        <svg {...common}>
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      );
+    default:
+      return null;
   }
-  if (value < 0) {
-    return 'stat-card__value--negative';
-  }
+}
+
+function balanceModifier(value: number): string {
+  if (value > 0) return 'is-positive';
+  if (value < 0) return 'is-negative';
   return '';
 }
 
@@ -42,44 +117,110 @@ function BarChart({ points }: { points: ChartPoint[] }) {
   );
 
   return (
-    <div className="bar-chart">
+    <div
+      className="bar-chart"
+      role="img"
+      aria-label="Graphique des heures travaillées"
+    >
       {points.map((point) => (
         <div className="bar-chart__column" key={point.key} title={point.title}>
           <div className="bar-chart__track">
             <div
-              className={`bar-chart__bar ${point.isWeekend ? 'bar-chart__bar--weekend' : ''}`}
+              className={`bar-chart__bar ${
+                point.isActive ? 'bar-chart__bar--active' : ''
+              } ${point.isWeekend ? 'bar-chart__bar--weekend' : ''}`}
               style={{ height: `${Math.round((point.value / scale) * 100)}%` }}
             />
-            <span
-              className="bar-chart__objective"
-              style={{ bottom: `${Math.round((point.objective / scale) * 100)}%` }}
-            />
+            {point.objective > 0 && (
+              <span
+                className="bar-chart__objective"
+                style={{
+                  bottom: `${Math.round((point.objective / scale) * 100)}%`,
+                }}
+              />
+            )}
           </div>
-          <span className={`bar-chart__label ${point.isWeekend ? 'bar-chart__label--weekend' : ''}`}>{point.label}</span>
+          <span
+            className={`bar-chart__label ${
+              point.isWeekend ? 'bar-chart__label--weekend' : ''
+            }`}
+          >
+            {point.label}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
-function WeekSummarySkeleton() {
+function MiniBars({
+  values,
+  activeIndex,
+  mutedIndexes = [],
+}: {
+  values: number[];
+  activeIndex?: number;
+  mutedIndexes?: number[];
+}) {
+  const max = Math.max(1, ...values);
+
   return (
-    <div className="stats-row">
-      <div className="stat-card">
-        <span className="stat-card__label">Réalisé</span>
-        <div className="skeleton skeleton--text" style={{ width: '80px' }} />
+    <div className="mini-bars" aria-hidden="true">
+      {values.map((value, index) => (
+        <span
+          key={index}
+          className={`mini-bars__bar ${
+            index === activeIndex ? 'mini-bars__bar--active' : ''
+          } ${mutedIndexes.includes(index) ? 'mini-bars__bar--muted' : ''}`}
+          style={{ height: `${Math.max(10, Math.round((value / max) * 100))}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  const max = Math.max(1, ...values);
+  const points = values.map((value, index) => {
+    const x = values.length <= 1 ? 50 : (index / (values.length - 1)) * 100;
+    const y = 37 - (value / max) * 31;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const area = `0,40 ${points.join(' ')} 100,40`;
+
+  return (
+    <svg
+      className="sparkline"
+      viewBox="0 0 100 40"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polygon points={area} />
+      <polyline points={points.join(' ')} />
+    </svg>
+  );
+}
+
+function Donut({ value, max }: { value: number; max: number }) {
+  const percent = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  const style = { '--donut-value': `${percent}%` } as CSSProperties;
+
+  return (
+    <div className="donut-wrap">
+      <div
+        className="donut"
+        style={style}
+        role="img"
+        aria-label={`${percent} % de l'objectif hebdomadaire réalisé`}
+      >
+        <div className="donut__inner">
+          <span className="donut__value">{percent}%</span>
+          <span className="donut__label">Objectif</span>
+        </div>
       </div>
-      <div className="stat-card">
-        <span className="stat-card__label">Objectif</span>
-        <div className="skeleton skeleton--text" style={{ width: '80px' }} />
-      </div>
-      <div className="stat-card">
-        <span className="stat-card__label">Solde</span>
-        <div className="skeleton skeleton--text" style={{ width: '80px' }} />
-      </div>
-      <div className="stat-card">
-        <span className="stat-card__label">Jours pointés</span>
-        <div className="skeleton skeleton--text" style={{ width: '60px' }} />
+      <div className="progress-legend" aria-hidden="true">
+        <span>Réalisé</span>
+        <span>Restant</span>
       </div>
     </div>
   );
@@ -185,8 +326,25 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="page-loading" role="status">
-        Chargement…
+      <div className="page dashboard-page" aria-busy="true">
+        <div className="page__head page__head--split">
+          <div>
+            <span className="page__eyebrow">Vue d&apos;ensemble</span>
+            <h1 className="page__title">Tableau de bord</h1>
+          </div>
+        </div>
+        <div className="kpi-grid">
+          {[0, 1, 2, 3].map((item) => (
+            <div key={item} className="skeleton skeleton--kpi" />
+          ))}
+        </div>
+        <div className="dashboard-grid">
+          <div className="skeleton skeleton--panel" />
+          <div className="skeleton skeleton--panel" />
+        </div>
+        <span className="sr-only" role="status">
+          Chargement du tableau de bord…
+        </span>
       </div>
     );
   }
@@ -210,18 +368,24 @@ export function DashboardPage() {
   const { today, week, leaves, trends, stats } = dashboard;
   const dailyObjective = today.expectedMinutes;
   const isCurrentWeek = weekStart === null;
+  const weekProgress =
+    week.expectedMinutes > 0
+      ? Math.min(100, Math.round((week.workedMinutes / week.expectedMinutes) * 100))
+      : 0;
+  const weekRemaining = Math.max(0, week.expectedMinutes - week.workedMinutes);
+  const dailyActiveIndex = trends.daily.findIndex(
+    (point) => point.date === today.date,
+  );
 
-  // Filter to business days only (Mon-Fri) for the chart
-  const businessDayPoints: ChartPoint[] = trends.daily
-    .filter((point) => !point.isWeekend)
-    .map((point) => ({
-      key: point.date,
-      label: point.date.slice(8),
-      title: `${formatDateFr(point.date)} : ${formatDuration(point.workedMinutes)}`,
-      value: point.workedMinutes,
-      objective: dailyObjective,
-      isWeekend: false,
-    }));
+  const dailyPoints: ChartPoint[] = trends.daily.map((point) => ({
+    key: point.date,
+    label: WEEKDAY_LABELS[new Date(`${point.date}T00:00:00`).getDay()],
+    title: `${formatDateFr(point.date)} : ${formatDuration(point.workedMinutes)}`,
+    value: point.workedMinutes,
+    objective: point.isWeekend ? 0 : dailyObjective,
+    isWeekend: point.isWeekend,
+    isActive: point.date === today.date,
+  }));
 
   const weeklyPoints: ChartPoint[] = trends.weekly.map((point) => ({
     key: point.weekStart,
@@ -229,16 +393,38 @@ export function DashboardPage() {
     title: `Semaine du ${formatDateFr(point.weekStart)} : ${formatDuration(point.workedMinutes)}`,
     value: point.workedMinutes,
     objective: point.expectedMinutes,
+    isActive: point.weekStart === week.weekStart,
   }));
 
   const hasDailyData = trends.daily.some((point) => point.workedMinutes > 0);
+  const updatedAt = new Date(dashboard.generatedAt).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const holidaySuffix = leaves.holidaysThisMonth > 1 ? 's' : '';
 
   return (
-    <div className="page">
-      <div className="page__head">
-        <h1 className="page__title">Tableau de bord</h1>
-        <p className="page__subtitle">Vue synthétique du temps et des congés</p>
-      </div>
+    <div className="page dashboard-page">
+      <header className="page__head page__head--split">
+        <div>
+          <span className="page__eyebrow">Vue d&apos;ensemble</span>
+          <h1 className="page__title">Tableau de bord</h1>
+          <p className="page__subtitle">
+            Votre activité et vos congés en un coup d&apos;œil.
+          </p>
+        </div>
+        <div className="page__actions">
+          <span className="update-chip">Mis à jour à {updatedAt}</span>
+          <button
+            type="button"
+            className="button button--ghost button--small"
+            onClick={retry}
+          >
+            <Icon name="refresh" size={14} />
+            Actualiser
+          </button>
+        </div>
+      </header>
 
       {error && (
         <div className="alert alert--error" role="alert">
@@ -246,190 +432,280 @@ export function DashboardPage() {
         </div>
       )}
 
-      <section className="stats-row">
-        <div className="stat-card">
-          <span className="stat-card__label">Aujourd'hui</span>
-          <span className="stat-card__value">
+      <section className="kpi-grid" aria-label="Indicateurs clés">
+        <article className="kpi-card kpi-card--violet">
+          <div className="kpi-card__top">
+            <span className="kpi-card__label">Aujourd&apos;hui</span>
+            <span className="kpi-card__icon">
+              <Icon name="sun" size={18} />
+            </span>
+          </div>
+          <strong className="kpi-card__value">
             {formatDuration(today.workedMinutes)}
-          </span>
-          <span className="card__note">
-            {today.recorded
-              ? `Objectif ${formatDuration(today.expectedMinutes)} · Solde ${formatBalance(today.balanceMinutes)}`
-              : 'Journée non pointée'}
-          </span>
-        </div>
+          </strong>
+          <p className="kpi-card__note">
+            {today.recorded ? (
+              <>
+                Objectif {formatDuration(today.expectedMinutes)}{' '}
+                <span
+                  className={`kpi-balance ${
+                    today.balanceMinutes >= 0
+                      ? 'kpi-balance--positive'
+                      : 'kpi-balance--negative'
+                  }`}
+                >
+                  {formatBalance(today.balanceMinutes)}
+                </span>
+              </>
+            ) : (
+              'Journée non pointée'
+            )}
+          </p>
+          <div className="kpi-card__foot">
+            <MiniBars
+              values={trends.daily.map((point) => point.workedMinutes)}
+              activeIndex={dailyActiveIndex}
+              mutedIndexes={trends.daily
+                .map((point, index) => (point.isWeekend ? index : -1))
+                .filter((index) => index >= 0)}
+            />
+          </div>
+        </article>
 
-        <div className="stat-card">
-          <span className="stat-card__label">Semaine</span>
-          <span className="stat-card__value">
+        <article className="kpi-card">
+          <div className="kpi-card__top">
+            <span className="kpi-card__label">Cette semaine</span>
+            <span className="kpi-card__icon">
+              <Icon name="week" size={18} />
+            </span>
+          </div>
+          <strong className="kpi-card__value">
             {formatDuration(week.workedMinutes)}
-          </span>
-          <span className="card__note">
+          </strong>
+          <p className="kpi-card__note">
             Objectif {formatDuration(week.expectedMinutes)} ·{' '}
-            <span className={balanceClass(week.balanceMinutes)}>
+            <span className={balanceModifier(week.balanceMinutes)}>
               {formatBalance(week.balanceMinutes)}
             </span>
-          </span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-card__label">Solde de congés</span>
-          <span className="stat-card__value">{formatDays(leaves.availableDays)}</span>
-          <span className="card__note">
-            {formatDays(leaves.consumedThisMonth)} consommés ce mois ·{' '}
-            {formatDays(leaves.holidaysThisMonth)} férié{leaves.holidaysThisMonth > 1 ? 's' : ''} ce mois
-          </span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-card__label">Jours travaillés ce mois</span>
-          <span className="stat-card__value">{formatDays(leaves.workedDaysThisMonth)}</span>
-          <span className="card__note">
-            (hors fériés et congés)
-          </span>
-        </div>
-      </section>
-
-      <section className="card card--wide">
-        <div className="section-head">
-          <h2 className="section-head__title">Heures de la semaine</h2>
-          <span className="segment-nav__label">
-            Objectif {formatDuration(dailyObjective)} par jour
-          </span>
-        </div>
-        {hasDailyData ? (
-          <BarChart points={businessDayPoints} />
-        ) : (
-          <p className="empty-state">
-            Aucune journée enregistrée cette semaine.
           </p>
-        )}
-      </section>
-
-      <section className="card card--wide">
-        <div className="section-head">
-          <h2 className="section-head__title">Résumé de la semaine</h2>
-          <div className="week-nav">
-            <span className="segment-nav__label">
-              du {formatDateFr(week.weekStart)} au {formatDateFr(week.weekEnd)}
-            </span>
-            <div className="week-nav__actions">
-              <button
-                type="button"
-                className="button button--ghost button--small"
-                onClick={() => navigateWeek('prev')}
-                aria-label="Semaine précédente"
-                disabled={weekLoading}
-              >
-                ‹ Précédente
-              </button>
-              {!isCurrentWeek && (
-                <button
-                  type="button"
-                  className="button button--ghost button--small"
-                  onClick={goToCurrentWeek}
-                  aria-label="Semaine actuelle"
-                  disabled={weekLoading}
-                >
-                  Semaine actuelle
-                </button>
-              )}
-              <button
-                type="button"
-                className="button button--ghost button--small"
-                onClick={() => navigateWeek('next')}
-                aria-label="Semaine suivante"
-                disabled={weekLoading}
-              >
-                Suivante ›
-              </button>
-            </div>
-          </div>
-        </div>
-        {weekLoading ? (
-          <WeekSummarySkeleton />
-        ) : (
-          <div className="stats-row">
-            <div className="stat-card">
-              <span className="stat-card__label">Réalisé</span>
-              <span className="stat-card__value">
-                {formatDuration(week.workedMinutes)}
-              </span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card__label">Objectif</span>
-              <span className="stat-card__value">
-                {formatDuration(week.expectedMinutes)}
-              </span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card__label">Solde</span>
+          <div className="kpi-progress">
+            <div className="kpi-progress__track">
               <span
-                className={`stat-card__value ${balanceClass(week.balanceMinutes)}`}
-              >
-                {formatBalance(week.balanceMinutes)}
+                className="kpi-progress__fill"
+                style={{ width: `${weekProgress}%` }}
+              />
+            </div>
+            <div className="kpi-progress__meta">
+              <span>{weekProgress}% de l&apos;objectif</span>
+              <span>{formatDuration(weekRemaining)} restantes</span>
+            </div>
+          </div>
+        </article>
+
+        <article className="kpi-card kpi-card--warm">
+          <div className="kpi-card__top">
+            <span className="kpi-card__label">Solde de congés</span>
+            <span className="kpi-card__icon">
+              <Icon name="calendar" size={18} />
+            </span>
+          </div>
+          <strong className="kpi-card__value">
+            {formatDays(leaves.availableDays)}
+          </strong>
+          <p className="kpi-card__note">
+            {formatDays(leaves.consumedThisMonth)} pris ce mois
+          </p>
+          <div className="kpi-card__foot kpi-card__meta">
+            <span className="kpi-chip">
+              {formatDays(leaves.pendingDays)} en attente
+            </span>
+            <span className="kpi-chip">
+              {leaves.holidaysThisMonth} férié{holidaySuffix}
+            </span>
+          </div>
+        </article>
+
+        <article className="kpi-card kpi-card--dark">
+          <div className="kpi-card__top">
+            <span className="kpi-card__label">Jours travaillés</span>
+            <span className="kpi-card__icon">
+              <Icon name="spark" size={18} />
+            </span>
+          </div>
+          <strong className="kpi-card__value">
+            {formatDays(leaves.workedDaysThisMonth)}
+          </strong>
+          <p className="kpi-card__note">ce mois · hors fériés et congés</p>
+          <div className="kpi-card__foot">
+            <Sparkline
+              values={trends.weekly.map((point) => point.workedMinutes)}
+            />
+          </div>
+        </article>
+      </section>
+
+      <div className="dashboard-grid">
+        <section className="card chart-card">
+          <div className="section-head">
+            <div>
+              <h2 className="section-head__title">Activité de la semaine</h2>
+              <p className="section-head__subtitle">
+                Heures travaillées par jour
+              </p>
+            </div>
+            <span className="chart-legend" aria-hidden="true">
+              <span>
+                <i className="chart-legend__dot" />
+                Réalisé
               </span>
+              <span>
+                <i className="chart-legend__dash" />
+                Objectif
+              </span>
+            </span>
+          </div>
+          {hasDailyData ? (
+            <BarChart points={dailyPoints} />
+          ) : (
+            <p className="empty-state">
+              Aucune journée enregistrée cette semaine.
+            </p>
+          )}
+        </section>
+
+        <aside className="card progress-card">
+          <div className="section-head">
+            <div>
+              <h2 className="section-head__title">Progression</h2>
+              <p className="section-head__subtitle">
+                Semaine du {formatDateFr(week.weekStart)} au{' '}
+                {formatDateFr(week.weekEnd)}
+              </p>
             </div>
-            <div className="stat-card">
-              <span className="stat-card__label">Jours pointés</span>
-              <span className="stat-card__value">{week.recordedDays}</span>
+            {!isCurrentWeek && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={goToCurrentWeek}
+                disabled={weekLoading}
+              >
+                Aujourd&apos;hui
+              </button>
+            )}
+          </div>
+
+          {weekLoading ? (
+            <div className="progress-card__loading">
+              <div className="skeleton skeleton--donut" />
+              <div className="skeleton skeleton--text" />
+            </div>
+          ) : (
+            <Donut value={week.workedMinutes} max={week.expectedMinutes} />
+          )}
+
+          <div className="progress-card__stats">
+            <div className="progress-stat">
+              <span>Réalisé</span>
+              <strong>{formatDuration(week.workedMinutes)}</strong>
+            </div>
+            <div className="progress-stat">
+              <span>Objectif</span>
+              <strong>{formatDuration(week.expectedMinutes)}</strong>
+            </div>
+            <div className="progress-stat">
+              <span>Solde</span>
+              <strong className={balanceModifier(week.balanceMinutes)}>
+                {formatBalance(week.balanceMinutes)}
+              </strong>
+            </div>
+            <div className="progress-stat">
+              <span>Jours pointés</span>
+              <strong>{week.recordedDays}</strong>
             </div>
           </div>
-        )}
-      </section>
 
-      <section className="card card--wide">
-        <div className="section-head">
-          <h2 className="section-head__title">Tendance hebdomadaire</h2>
-          <span className="segment-nav__label">8 dernières semaines</span>
-        </div>
-        <BarChart points={weeklyPoints} />
-      </section>
+          <div className="progress-card__nav">
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => navigateWeek('prev')}
+              aria-label="Semaine précédente"
+              disabled={weekLoading}
+            >
+              <Icon name="chevron-left" size={18} />
+            </button>
+            <span className="progress-card__nav-label">
+              {isCurrentWeek ? 'Semaine actuelle' : 'Semaine sélectionnée'}
+            </span>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => navigateWeek('next')}
+              aria-label="Semaine suivante"
+              disabled={weekLoading}
+            >
+              <Icon name="chevron-right" size={18} />
+            </button>
+          </div>
+        </aside>
+      </div>
 
-      <section className="card card--wide">
-        <div className="section-head">
-          <h2 className="section-head__title">
-            Statistiques — {stats.windowDays} derniers jours
-          </h2>
-          <span className="segment-nav__label">
-            Mis à jour le {new Date(dashboard.generatedAt).toLocaleString('fr-FR')}
-          </span>
-        </div>
-        <div className="stats-row">
-          <div className="stat-card">
-            <span className="stat-card__label">Jours pointés</span>
-            <span className="stat-card__value">{stats.recordedDays}</span>
+      <div className="dashboard-grid dashboard-grid--balanced">
+        <section className="card chart-card chart-card--short">
+          <div className="section-head">
+            <div>
+              <h2 className="section-head__title">Tendance hebdomadaire</h2>
+              <p className="section-head__subtitle">8 dernières semaines</p>
+            </div>
+            <span className="pill">8 semaines</span>
           </div>
-          <div className="stat-card">
-            <span className="stat-card__label">Total travaillé</span>
-            <span className="stat-card__value">
-              {formatDuration(stats.totalWorkedMinutes)}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card__label">Moyenne / jour</span>
-            <span className="stat-card__value">
-              {formatDuration(stats.averageMinutesPerDay)}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card__label">Au-dessus de l'objectif</span>
-            <span className="stat-card__value stat-card__value--positive">
-              {stats.daysAboveObjective}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card__label">En dessous</span>
-            <span className="stat-card__value stat-card__value--negative">
-              {stats.daysBelowObjective}
-            </span>
-          </div>
-        </div>
-      </section>
+          <BarChart points={weeklyPoints} />
+        </section>
 
-      <section className="card card--wide">
+        <aside className="card stats-panel">
+          <div className="section-head">
+            <div>
+              <h2 className="section-head__title">
+                {stats.windowDays} derniers jours
+              </h2>
+              <p className="section-head__subtitle">Vue d&apos;ensemble</p>
+            </div>
+          </div>
+          <ul className="stats-panel__list">
+            <li>
+              <span>Jours pointés</span>
+              <strong>{stats.recordedDays}</strong>
+            </li>
+            <li>
+              <span>Total travaillé</span>
+              <strong>{formatDuration(stats.totalWorkedMinutes)}</strong>
+            </li>
+            <li>
+              <span>Moyenne / jour</span>
+              <strong>{formatDuration(stats.averageMinutesPerDay)}</strong>
+            </li>
+            <li>
+              <span>Au-dessus de l&apos;objectif</span>
+              <strong className="is-positive">{stats.daysAboveObjective}</strong>
+            </li>
+            <li>
+              <span>En dessous</span>
+              <strong className="is-negative">{stats.daysBelowObjective}</strong>
+            </li>
+          </ul>
+          <p className="stats-panel__foot">
+            Mis à jour le{' '}
+            {new Date(dashboard.generatedAt).toLocaleString('fr-FR')}
+          </p>
+        </aside>
+      </div>
+
+      <section className="card table-card">
         <div className="section-head">
-          <h2 className="section-head__title">Historique (5 journées)</h2>
+          <div>
+            <h2 className="section-head__title">Historique récent</h2>
+            <p className="section-head__subtitle">5 dernières journées</p>
+          </div>
 
           <div className="date-range">
             <button
@@ -438,6 +714,7 @@ export function DashboardPage() {
               onClick={() => setShowCalendar((open) => !open)}
               aria-expanded={showCalendar}
             >
+              <Icon name="calendar" size={14} />
               {rangeLabel}
             </button>
 
@@ -451,7 +728,7 @@ export function DashboardPage() {
                   weekStartsOn={1}
                   showDateDisplay={false}
                   moveRangeOnFirstSelection={false}
-                  rangeColors={['#2563eb']}
+                  rangeColors={['#7c3aed']}
                 />
                 <div className="date-range__actions">
                   <button
@@ -477,38 +754,61 @@ export function DashboardPage() {
         {history.length === 0 ? (
           <p className="empty-state">Aucune journée enregistrée.</p>
         ) : (
-          <ul className="history-list">
-            {history.map((item) => (
-              <li key={item.id} className="history-item">
-                <span className="history-item__date">{formatDateFr(item.date)}</span>
-                <span className="history-item__hours">
-                  {item.entryTime ?? '--:--'} → {item.exitTime ?? '--:--'}
-                  {item.breakStart && (
-                    <span className="history-item__break">
-                      {' '}
-                      pause {item.breakStart}–{item.breakEnd ?? '?'}
-                    </span>
-                  )}
-                </span>
-                <span className="history-item__worked">
-                  {formatDuration(item.workedMinutes)}
-                </span>
-                <span
-                  className={`history-item__balance ${
-                    item.balanceMinutes > 0
-                      ? 'history-item__balance--positive'
-                      : item.balanceMinutes < 0
-                        ? 'history-item__balance--negative'
-                        : ''
-                  }`}
-                >
-                  {item.status === 'COMPLETED'
-                    ? formatBalance(item.balanceMinutes)
-                    : 'En cours'}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Horaires</th>
+                  <th scope="col">Travaillé</th>
+                  <th scope="col">Solde</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <span className="data-table__date">
+                        {formatDateFr(item.date)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="data-table__hours">
+                        {item.entryTime ?? '--:--'} → {item.exitTime ?? '--:--'}
+                      </span>
+                      {item.breakStart && (
+                        <span className="data-table__break">
+                          Pause {item.breakStart}–{item.breakEnd ?? '?'}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="data-table__value">
+                        {formatDuration(item.workedMinutes)}
+                      </span>
+                    </td>
+                    <td>
+                      {item.status === 'COMPLETED' ? (
+                        <span
+                          className={`data-table__value ${
+                            item.balanceMinutes > 0
+                              ? 'is-positive'
+                              : item.balanceMinutes < 0
+                                ? 'is-negative'
+                                : ''
+                          }`}
+                        >
+                          {formatBalance(item.balanceMinutes)}
+                        </span>
+                      ) : (
+                        <span className="data-table__status">En cours</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>
