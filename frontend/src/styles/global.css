@@ -141,6 +141,33 @@ a:hover {
   font-weight: 600;
 }
 
+.app-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.app-logout:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-logout:hover {
+    background: rgba(220, 38, 38, 0.18);
+  }
+}
+
 .app-brand {
   font-weight: 700;
   font-size: 18px;
@@ -1853,6 +1880,12 @@ select.input {
   .app-nav .button {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .app-nav .app-logout {
+    width: 44px;
+    height: 44px;
+    align-self: flex-start;
   }
 }
 

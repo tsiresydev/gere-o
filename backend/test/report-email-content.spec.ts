@@ -46,4 +46,33 @@ describe('ReportService — contenu de l’e-mail', () => {
     expect(message).toContain('**Détail des congés :**');
     expect(message).toContain('- 12/11/2026 : 0,5 jour (matin)');
   });
+
+  it('utilise l’email de l’utilisateur connecté comme expéditeur', async () => {
+    const workDayModel = { find: jest.fn().mockResolvedValue([]) };
+    const requestModel = { find: jest.fn().mockResolvedValue([]) };
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        _id: 'user-1',
+        firstName: 'Élise',
+        lastName: 'Employé',
+        email: 'elise@example.com',
+      }),
+    };
+    const emailService = {
+      getFrom: () => ({ email: 'smtp@example.com', name: 'SMTP' }),
+      getBcc: () => null,
+    };
+    const service = new ReportService(
+      workDayModel as never,
+      requestModel as never,
+      usersService as never,
+      emailService as never,
+      {} as never,
+    );
+
+    const preview = await service.generatePreview('user-1', 2026, 11);
+
+    expect(preview.from).toBe('elise@example.com');
+    expect(preview.senderName).toBe('Élise EMPLOYÉ');
+  });
 });

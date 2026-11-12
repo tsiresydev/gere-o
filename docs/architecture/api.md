@@ -423,7 +423,7 @@ GET  /api/email/reports/:id
 
 Génère l'aperçu du récapitulatif (jours travaillés, congés pris, corps du message) pour l'utilisateur connecté.
 
-**Corps** : `{ "year": 2026, "month": 11 }` — réponse : `from`, `to`, `cc`, `subject`, `message`, statistiques et détail des congés.
+**Corps** : `{ "year": 2026, "month": 11 }` — réponse : `from` (email de l'utilisateur connecté), `to`, `cc`, `subject`, `message`, statistiques et détail des congés.
 
 #### `POST /api/email/report/send`
 

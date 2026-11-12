@@ -53,9 +53,10 @@ export class ReportService {
 
     const data = await this.buildReportData(user, year, month);
     const { subject, message } = this.buildEmailContent(data);
+    const sender = this.resolveSender(user);
 
     return {
-      from: this.emailService.getFrom().email,
+      from: sender.email,
       to: 'kevin.doste@madasoftware.com',
       cc: 'voarizara@gmail.com',
       subject,
@@ -85,10 +86,14 @@ export class ReportService {
     // Construction du HTML
     const html = this.buildHtmlContent(dto.message);
 
+    // Expéditeur : l'utilisateur connecté (Gmail exige que l'adresse
+    // corresponde au compte authentifié ou à un alias vérifié).
+    const sender = this.resolveSender(user);
+
     // Envoi avec BCC systématique
     const bcc = this.emailService.getBcc();
     const result = await this.emailService.sendMail({
-      from: this.emailService.getFrom(),
+      from: sender,
       to: [{ email: dto.to }],
       cc: dto.cc ? [{ email: dto.cc }] : undefined,
       bcc: bcc ? [bcc] : undefined,
@@ -109,7 +114,7 @@ export class ReportService {
         year: dto.year,
         month: dto.month,
         monthLabel: data.monthLabel,
-        from: this.emailService.getFrom().email,
+        from: sender.email,
         to: dto.to,
         cc: dto.cc,
         bcc: bcc?.email,
@@ -279,6 +284,22 @@ export class ReportService {
     if (request.startDurationType === 'HALF_DAY_MORNING') return 'morning';
     if (request.startDurationType === 'HALF_DAY_AFTERNOON') return 'afternoon';
     return 'full';
+  }
+
+  /**
+   * Expéditeur par défaut : l'utilisateur connecté.
+   * Le nom affiché suit la même convention que la signature du message.
+   */
+  private resolveSender(user: {
+    email?: string;
+    firstName: string;
+    lastName: string;
+  }): { email: string; name: string } {
+    const fallback = this.emailService.getFrom();
+    return {
+      email: user.email?.trim() || fallback.email,
+      name: `${user.firstName} ${user.lastName.toUpperCase()}`,
+    };
   }
 
   private isValidEmail(email: string): boolean {

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
-import { ROLE_LABELS, roleClass } from '../types/roles';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Ma journée' },
@@ -80,11 +79,28 @@ export function AppLayout() {
                 <span className="app-user-name">
                   {user.firstName} {user.lastName}
                 </span>
-                <span className={`role-badge role-badge--${roleClass(user.role)}`}>
-                  {ROLE_LABELS[user.role]}
-                </span>
-                <button type="button" className="button button--ghost button--small" onClick={handleLogout}>
-                  Se déconnecter
+                <button
+                  type="button"
+                  className="app-logout"
+                  onClick={handleLogout}
+                  aria-label="Se déconnecter"
+                  title="Se déconnecter"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
                 </button>
               </nav>
             </>
