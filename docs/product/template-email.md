@@ -13,6 +13,8 @@ Je reste à votre disposition pour toute information complémentaire.
 
 Cordialement,
 
-Tsiresy RABEKOTO
+{{NOM}}
 
+> `{{NOM}}` correspond au prénom et au nom de l'utilisateur connecté.
+>
 > La section « Détail des congés » n'est pas incluse lorsque le total des congés est de 0 jour.

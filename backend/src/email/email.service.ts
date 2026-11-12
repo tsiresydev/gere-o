@@ -18,6 +18,9 @@ interface SendMailOptions {
   html: string;
 }
 
+const formatRecipient = ({ email, name }: EmailRecipient): string =>
+  name ? `${name} <${email}>` : email;
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -33,7 +36,9 @@ export class EmailService {
     const smtpFrom = configService.getOrThrow<string>('smtpFrom');
     const bccEmail = configService.get<string | null>('emailReportBcc');
 
-    this.from = { email: smtpFrom, name: 'Tsiresy RABEKOTO' };
+    // Le nom affiché est fourni par l'appelant (utilisateur connecté) ;
+    // cette adresse ne sert que de repli.
+    this.from = { email: smtpFrom };
     this.bcc = bccEmail ? { email: bccEmail } : null;
 
     this.transporter = nodemailer.createTransport({
@@ -67,13 +72,13 @@ export class EmailService {
       }
 
       const info = await this.transporter.sendMail({
-        from: `${options.from.name} <${options.from.email}>`,
-        to: recipients.map((r) => `${r.name ?? ''} <${r.email}>`).join(', '),
+        from: formatRecipient(options.from),
+        to: recipients.map(formatRecipient).join(', '),
         cc: options.cc && options.cc.length > 0
-          ? options.cc.map((r) => `${r.name ?? ''} <${r.email}>`).join(', ')
+          ? options.cc.map(formatRecipient).join(', ')
           : undefined,
         bcc: options.bcc && options.bcc.length > 0
-          ? options.bcc.map((r) => `${r.name ?? ''} <${r.email}>`).join(', ')
+          ? options.bcc.map(formatRecipient).join(', ')
           : undefined,
         subject: options.subject,
         html: options.html,
