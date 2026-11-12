@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', label: 'Tableau de bord' },
   { to: '/calendrier', label: 'Calendrier' },
   { to: '/conges', label: 'Mes congés' },
+  { to: '/rapports', label: 'Rapports' },
   { to: '/profil', label: 'Mon profil' },
 ];
 

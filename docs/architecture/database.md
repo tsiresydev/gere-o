@@ -95,6 +95,31 @@ LeaveTransaction
 
 Rôle : historique immuable de tous les mouvements du solde de congés. Chaque modification du `LeaveBalance` génère une transaction.
 
+### SentReport
+
+```text
+SentReport
+- _id : ObjectId
+- userId : ObjectId (référence User, indexé)
+- year : number
+- month : number (1-12)
+- monthLabel : string
+- from : string
+- to : string
+- cc : string (optionnel)
+- bcc : string (optionnel)
+- subject : string
+- message : string (corps envoyé, snapshot)
+- workedDays : number
+- totalLeaveDays : number
+- senderName : string
+- messageId : string (optionnel)
+- createdAt : Date
+- updatedAt : Date
+```
+
+Rôle : archive des récapitulatifs mensuels réellement envoyés. Le contenu est figé au moment de l'envoi ; aucune mise à jour n'est effectuée après création. Index `{ userId: 1, createdAt: -1 }` pour l'historique personnel.
+
 ## Règles de cohérence
 
 - Les calculs sont effectués côté backend uniquement

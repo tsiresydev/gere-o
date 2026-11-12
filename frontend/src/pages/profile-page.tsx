@@ -3,7 +3,6 @@ import { useAuth } from '../context/auth-context';
 import { api, ApiError } from '../services/api';
 import { ROLE_LABELS, roleClass } from '../types/roles';
 import type { User } from '../types/user';
-import { MonthlyReportSection } from '../components/monthly-report-section';
 
 export function ProfilePage() {
   const { user } = useAuth();
@@ -127,8 +126,6 @@ export function ProfilePage() {
           </section>
         )}
       </div>
-
-      <MonthlyReportSection />
     </div>
   );
 }

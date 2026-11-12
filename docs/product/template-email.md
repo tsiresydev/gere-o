@@ -7,10 +7,12 @@ Veuillez trouver ci-dessous le récapitulatif de mes jours travaillés et des co
 - **Congés pris :** {{TOTAL_CONGES}}
 
 **Détail des congés :**
-{{DETAIL_CONGES}}
+- {{DATE}} : {{DUREE}} jour(s) ({{PERIODE}})
 
 Je reste à votre disposition pour toute information complémentaire.
 
 Cordialement,
 
 Tsiresy RABEKOTO
+
+> La section « Détail des congés » n'est pas incluse lorsque le total des congés est de 0 jour.

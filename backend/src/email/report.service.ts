@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { WorkDay, WorkDayDocument } from '../work-days/entities/work-day.schema';
 import { LeaveRequest, LeaveRequestDocument } from '../leaves/entities/leave-request.schema';
 import { EmailService } from './email.service';
+import { SentReportService } from './sent-report.service';
 import {
   EmailReportData,
   EmailReportPreview,
@@ -24,10 +25,7 @@ Veuillez trouver ci-dessous le récapitulatif de mes jours travaillés et des co
 
 **Récapitulatif :**
 - **Jours travaillés :** {{JOURS_TRAVAILLES}}
-- **Congés pris :** {{TOTAL_CONGES}}
-
-**Détail des congés :**
-{{DETAIL_CONGES}}
+- **Congés pris :** {{TOTAL_CONGES}}{{BLOC_CONGES}}
 
 Je reste à votre disposition pour toute information complémentaire.
 
@@ -44,6 +42,7 @@ export class ReportService {
     @InjectModel(LeaveRequest.name) private readonly requestModel: Model<LeaveRequestDocument>,
     private readonly usersService: UsersService,
     private readonly emailService: EmailService,
+    private readonly sentReportService: SentReportService,
   ) {}
 
   async generatePreview(userId: string, year: number, month: number): Promise<EmailReportPreview> {
@@ -99,9 +98,34 @@ export class ReportService {
 
     if (!result.success) {
       this.logger.error(`Échec envoi rapport: ${result.error}`);
+      return result;
     }
 
-    return result;
+    // Archive le rapport effectivement envoyé (snapshot), sans faire échouer
+    // la réponse si la persistance échoue : l'e-mail est déjà parti.
+    try {
+      const data = await this.buildReportData(user, dto.year, dto.month);
+      const saved = await this.sentReportService.create(userId, {
+        year: dto.year,
+        month: dto.month,
+        monthLabel: data.monthLabel,
+        from: this.emailService.getFrom().email,
+        to: dto.to,
+        cc: dto.cc,
+        bcc: bcc?.email,
+        subject: dto.subject,
+        message: dto.message,
+        workedDays: data.workedDays,
+        totalLeaveDays: data.totalLeaveDays,
+        senderName: data.senderName,
+        messageId: result.messageId,
+      });
+      return { ...result, id: String(saved._id) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Rapport envoyé mais non archivé: ${message}`);
+      return result;
+    }
   }
 
   async buildReportData(user: { _id: unknown; firstName: string; lastName: string; email: string }, year: number, month: number): Promise<EmailReportData> {
@@ -216,12 +240,18 @@ export class ReportService {
       })
       .join('\n');
 
+    // Aucun congé sur le mois : on n'envoie pas la section « Détail des congés ».
+    const leaveBlock =
+      data.totalLeaveDays > 0 && detailLines
+        ? `\n\n**Détail des congés :**\n${detailLines}`
+        : '';
+
     const message = EMAIL_TEMPLATE
       .replace(/\{\{MOIS\}\}/g, data.monthLabel.split(' ')[0])
       .replace(/\{\{ANNEE\}\}/g, String(data.year))
       .replace(/\{\{JOURS_TRAVAILLES\}\}/g, this.formatDayCount(data.workedDays))
       .replace(/\{\{TOTAL_CONGES\}\}/g, this.formatDayCount(data.totalLeaveDays))
-      .replace(/\{\{DETAIL_CONGES\}\}/g, detailLines || 'Aucun congé pris ce mois.')
+      .replace(/\{\{BLOC_CONGES\}\}/g, leaveBlock)
       .replace(/\{\{NOM\}\}/g, data.senderName);
 
     return { subject, message };

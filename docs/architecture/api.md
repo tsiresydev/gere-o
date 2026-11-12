@@ -404,6 +404,47 @@ Retourne une vue calendrier (mois ou plage) pour l'utilisateur connecté.
 
 **Kinds** : `WORKED`, `LEAVE` (présence de congé `APPROVED` sur le jour), `ABSENCE` (jour passé non pointé, sans congé approuvé), `FUTURE`, `WEEKEND`. Les congés `PENDING` sont visibles dans le calendrier via `leaves[]` (plafonné à la plage), mais n'affectent pas `kind` à `LEAVE`.
 
+## Rapports par e-mail
+
+Envoi et archivage des récapitulatifs mensuels. Chaque envoi réussi est conservé comme un **snapshot immuable** consultable dans la page « Rapports ».
+
+### Routes
+
+```
+POST /api/email/report/preview
+POST /api/email/report/send
+GET  /api/email/reports
+GET  /api/email/reports/:id
+```
+
+### Détails
+
+#### `POST /api/email/report/preview`
+
+Génère l'aperçu du récapitulatif (jours travaillés, congés pris, corps du message) pour l'utilisateur connecté.
+
+**Corps** : `{ "year": 2026, "month": 11 }` — réponse : `from`, `to`, `cc`, `subject`, `message`, statistiques et détail des congés.
+
+#### `POST /api/email/report/send`
+
+Envoie l'e-mail via Gmail SMTP puis archive le rapport **uniquement si l'envoi réussit**.
+
+**Corps** : `year`, `month`, `to`, `cc?`, `subject`, `message`.
+
+**Réponse** : `{ "success": true, "id": "<sentReportId>", "messageId": "<smtpId>" }` ou `{ "success": false, "error": "..." }`.
+
+#### `GET /api/email/reports`
+
+Liste paginée des rapports **de l'utilisateur connecté**, du plus récent au plus ancien.
+
+**Query** : `page` (défaut 1), `limit` (défaut 10, max 100), `year?`, `month?`.
+
+**Réponse** : `{ items, total, page, limit }`.
+
+#### `GET /api/email/reports/:id`
+
+Renvoie le détail complet d'un rapport (destinataires, objet, message archivé, `messageId`). Retourne `404` si le rapport n'existe pas ou appartient à un autre utilisateur.
+
 ## Authentification et autorisation
 
 | En-tête | Valeur |

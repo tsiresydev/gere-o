@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { ApiError } from '../services/api';
 import { reportService, type ReportPreview } from '../services/report.service';
 import { formatDays } from '../utils/time';
+import { EmailMessage } from './email-message';
+import { Toast, useToast, type ToastMessage } from './toast';
 
 const MONTH_NAMES = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -50,35 +52,32 @@ const IconLock = () => (
   </svg>
 );
 
-const IconAlert = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="7" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
-
 const Spinner = () => (
   <span className="spinner" aria-hidden="true" />
 );
 
-export function MonthlyReportSection() {
+interface MonthlyReportSectionProps {
+  /** Appelé après un envoi réussi, pour rafraîchir l'historique. */
+  onSent?: () => void;
+  /**
+   * Permet au parent de prendre en charge les notifications (par exemple pour
+   * qu'elles restent visibles après un changement d'onglet).
+   * Sans cette prop, le composant affiche son propre toast.
+   */
+  notify?: (message: ToastMessage | null) => void;
+}
+
+export function MonthlyReportSection({ onSent, notify }: MonthlyReportSectionProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const toast = useToast();
+  const notifyNotice = notify ?? toast.notify;
   const [showConfirm, setShowConfirm] = useState(false);
   const [view, setView] = useState<'edit' | 'preview'>('edit');
-
-  // La notification disparaît automatiquement après quelques secondes.
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 6000);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
 
   // Editable fields
   const [to, setTo] = useState('kevin.doste@madasoftware.com');
@@ -88,7 +87,7 @@ export function MonthlyReportSection() {
 
   const handleGenerate = useCallback(async () => {
     setLoading(true);
-    setNotice(null);
+    notifyNotice(null);
     setPreview(null);
     try {
       const data = await reportService.preview(year, month);
@@ -99,19 +98,19 @@ export function MonthlyReportSection() {
       setMessage(data.message);
       setView('edit');
     } catch (err) {
-      setNotice({
+      notifyNotice({
         type: 'error',
         text: err instanceof ApiError ? err.message : 'Impossible de générer le récapitulatif.',
       });
     } finally {
       setLoading(false);
     }
-  }, [year, month, setLoading, setNotice, setPreview, setTo, setCc, setSubject, setMessage, setView]);
+  }, [year, month, setLoading, notifyNotice, setPreview, setTo, setCc, setSubject, setMessage, setView]);
 
   const handleSend = useCallback(async () => {
     if (!preview) return;
     setSending(true);
-    setNotice(null);
+    notifyNotice(null);
     try {
       const result = await reportService.send({
         year,
@@ -123,24 +122,25 @@ export function MonthlyReportSection() {
       });
       if (result.success) {
         setShowConfirm(false);
-        setNotice({
+        notifyNotice({
           type: 'success',
           text: to
             ? `Email envoyé avec succès à ${to}.`
             : 'Email envoyé avec succès.',
         });
+        onSent?.();
       } else {
-        setNotice({ type: 'error', text: result.error ?? "Échec de l'envoi de l'email." });
+        notifyNotice({ type: 'error', text: result.error ?? "Échec de l'envoi de l'email." });
       }
     } catch (err) {
-      setNotice({
+      notifyNotice({
         type: 'error',
         text: err instanceof ApiError ? err.message : "Échec de l'envoi de l'email.",
       });
     } finally {
       setSending(false);
     }
-  }, [preview, year, month, to, cc, subject, message, setSending, setNotice, setShowConfirm]);
+  }, [preview, year, month, to, cc, subject, message, onSent, setSending, notifyNotice, setShowConfirm]);
 
   return (
     <section className="card card--wide report-card" aria-label="Récapitulatif mensuel par email">
@@ -357,13 +357,7 @@ export function MonthlyReportSection() {
                     <span className="report-email-preview__value report-email-preview__value--subject">{subject}</span>
                   </div>
                 </div>
-                <div className="report-email-preview__body">
-                  {message.split('\n').map((line, i) => {
-                    if (line === '') return <br key={i} />;
-                    const html = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                    return <p key={i} dangerouslySetInnerHTML={{ __html: html }} />;
-                  })}
-                </div>
+                <EmailMessage text={message} />
               </div>
 
               <div className="report-send-row">
@@ -424,27 +418,7 @@ export function MonthlyReportSection() {
         </div>
       )}
 
-      {/* Notification d'envoi */}
-      {notice && (
-        <div
-          className={`toast toast--${notice.type}`}
-          role={notice.type === 'error' ? 'alert' : 'status'}
-          aria-live={notice.type === 'error' ? 'assertive' : 'polite'}
-        >
-          <span className="toast__icon" aria-hidden="true">
-            {notice.type === 'success' ? <IconCheck /> : <IconAlert />}
-          </span>
-          <p className="toast__text">{notice.text}</p>
-          <button
-            type="button"
-            className="toast__close"
-            onClick={() => setNotice(null)}
-            aria-label="Fermer la notification"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      {!notify && <Toast notice={toast.notice} onClose={toast.clear} />}
     </section>
   );
 }

@@ -85,6 +85,7 @@ export class SendReportDto {
 
 export class EmailSendResult {
   success: boolean;
+  id?: string;
   messageId?: string;
   error?: string;
 }

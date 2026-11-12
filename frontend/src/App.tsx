@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/dashboard-page';
 import { CalendarPage } from './pages/calendar-page';
 import { LeavesPage } from './pages/leaves-page';
 import { ProfilePage } from './pages/profile-page';
+import { ReportsPage } from './pages/reports-page';
 import { WorkDayPage } from './pages/work-day-page';
 import { LoginPage } from './pages/login-page';
 import { RegisterPage } from './pages/register-page';
@@ -21,6 +22,7 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/calendrier" element={<CalendarPage />} />
           <Route path="/conges" element={<LeavesPage />} />
+          <Route path="/rapports" element={<ReportsPage />} />
           <Route path="/profil" element={<ProfilePage />} />
         </Route>
       </Route>
