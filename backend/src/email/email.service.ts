@@ -36,8 +36,7 @@ export class EmailService {
     const smtpFrom = configService.getOrThrow<string>('smtpFrom');
     const bccEmail = configService.get<string | null>('emailReportBcc');
 
-    // Le nom affiché est fourni par l'appelant (utilisateur connecté) ;
-    // cette adresse ne sert que de repli.
+    // Adresse commune du compte d'envoi ; le nom peut être fourni par l'appelant.
     this.from = { email: smtpFrom };
     this.bcc = bccEmail ? { email: bccEmail } : null;
 
@@ -99,7 +98,7 @@ export class EmailService {
       );
 
       const info = await this.transporter.sendMail({
-        from: formatRecipient(options.from),
+        from: formatRecipient({ email: this.from.email, name: options.from.name }),
         to: to.length > 0 ? to.map(formatRecipient).join(', ') : undefined,
         cc: cc.length > 0 ? cc.map(formatRecipient).join(', ') : undefined,
         bcc: bcc.length > 0 ? bcc.map(formatRecipient).join(', ') : undefined,

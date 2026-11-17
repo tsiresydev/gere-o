@@ -47,7 +47,7 @@ describe('ReportService — contenu de l’e-mail', () => {
     expect(message).toContain('- 12/11/2026 : 0,5 jour (matin)');
   });
 
-  it('utilise l’email de l’utilisateur connecté comme expéditeur', async () => {
+  it('utilise l’adresse SMTP commune tout en conservant le nom de l’utilisateur', async () => {
     const workDayModel = { find: jest.fn().mockResolvedValue([]) };
     const requestModel = { find: jest.fn().mockResolvedValue([]) };
     const usersService = {
@@ -72,7 +72,7 @@ describe('ReportService — contenu de l’e-mail', () => {
 
     const preview = await service.generatePreview('user-1', 2026, 11);
 
-    expect(preview.from).toBe('elise@example.com');
+    expect(preview.from).toBe('smtp@example.com');
     expect(preview.senderName).toBe('Élise EMPLOYÉ');
   });
 });

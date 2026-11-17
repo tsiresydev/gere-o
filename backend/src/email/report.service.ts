@@ -86,8 +86,7 @@ export class ReportService {
     // Construction du HTML
     const html = this.buildHtmlContent(dto.message);
 
-    // Expéditeur : l'utilisateur connecté (Gmail exige que l'adresse
-    // corresponde au compte authentifié ou à un alias vérifié).
+    // L'adresse d'expédition est celle du compte SMTP ; le nom reste personnel.
     const sender = this.resolveSender(user);
 
     // Envoi avec BCC systématique
@@ -287,8 +286,7 @@ export class ReportService {
   }
 
   /**
-   * Expéditeur par défaut : l'utilisateur connecté.
-   * Le nom affiché suit la même convention que la signature du message.
+   * Adresse d'expédition commune et nom de l'utilisateur connecté.
    */
   private resolveSender(user: {
     email?: string;
@@ -297,7 +295,7 @@ export class ReportService {
   }): { email: string; name: string } {
     const fallback = this.emailService.getFrom();
     return {
-      email: user.email?.trim() || fallback.email,
+      email: fallback.email,
       name: `${user.firstName} ${user.lastName.toUpperCase()}`,
     };
   }
