@@ -98,6 +98,9 @@ describe('Dashboard — API', () => {
         consumedDays: 0,
         pendingDays: 0,
         availableDays: 0,
+        consumedThisMonth: 0,
+        holidaysThisMonth: 0,
+        workedDaysThisMonth: 0,
       });
       // 7 days: Monday to Sunday
       expect(response.body.trends.daily).toHaveLength(7);
@@ -245,6 +248,9 @@ describe('Dashboard — API', () => {
         consumedDays: 5,
         pendingDays: 0,
         availableDays: 5,
+        consumedThisMonth: 5,
+        holidaysThisMonth: 0,
+        workedDaysThisMonth: 2,
       });
     });
 

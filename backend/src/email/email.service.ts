@@ -60,26 +60,49 @@ export class EmailService {
     return this.bcc;
   }
 
+  /** Supprime les doublons entre TO, CC et BCC (adresses sensibles à la casse). */
+  private uniqueRecipients(recipients: EmailRecipient[]): EmailRecipient[] {
+    const seen = new Set<string>();
+    return recipients.filter((recipient) => {
+      const key = recipient.email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   isConfigured(): boolean {
     return !!this.transporter;
   }
 
   async sendMail(options: SendMailOptions): Promise<EmailSendResult> {
     try {
-      const recipients = [...options.to];
-      if (options.cc && options.cc.length > 0) {
-        recipients.push(...options.cc);
-      }
+      const to = this.uniqueRecipients(options.to ?? []);
+      const cc = this.uniqueRecipients(
+        (options.cc ?? []).filter(
+          (recipient) =>
+            !to.some(
+              (item) => item.email.toLowerCase() === recipient.email.toLowerCase(),
+            ),
+        ),
+      );
+      const bcc = this.uniqueRecipients(
+        (options.bcc ?? []).filter(
+          (recipient) =>
+            !to.some(
+              (item) => item.email.toLowerCase() === recipient.email.toLowerCase(),
+            ) &&
+            !cc.some(
+              (item) => item.email.toLowerCase() === recipient.email.toLowerCase(),
+            ),
+        ),
+      );
 
       const info = await this.transporter.sendMail({
         from: formatRecipient(options.from),
-        to: recipients.map(formatRecipient).join(', '),
-        cc: options.cc && options.cc.length > 0
-          ? options.cc.map(formatRecipient).join(', ')
-          : undefined,
-        bcc: options.bcc && options.bcc.length > 0
-          ? options.bcc.map(formatRecipient).join(', ')
-          : undefined,
+        to: to.length > 0 ? to.map(formatRecipient).join(', ') : undefined,
+        cc: cc.length > 0 ? cc.map(formatRecipient).join(', ') : undefined,
+        bcc: bcc.length > 0 ? bcc.map(formatRecipient).join(', ') : undefined,
         subject: options.subject,
         html: options.html,
       });
