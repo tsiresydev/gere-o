@@ -1,0 +1,5 @@
+export enum CashTransactionType {
+  CONTRIBUTION_VALIDEE = 'CONTRIBUTION_VALIDEE',
+  DEPENSE = 'DEPENSE',
+  CORRECTION = 'CORRECTION',
+}

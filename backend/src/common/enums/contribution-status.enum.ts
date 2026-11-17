@@ -1,0 +1,7 @@
+export enum ContributionStatus {
+  NON_PAYE = 'NON_PAYE',
+  EN_RETARD = 'EN_RETARD',
+  EN_ATTENTE_DE_VALIDATION = 'EN_ATTENTE_DE_VALIDATION',
+  VALIDE = 'VALIDE',
+  REFUSE = 'REFUSE',
+}

@@ -13,3 +13,52 @@ export const DEFAULT_BREAK_END = '13:30';
 
 export const LEAVE_MONTHLY_ACCRUAL = 2.08;
 export const DEFAULT_LEAVE_INITIAL_BALANCE = 0;
+
+/** Module Cotisations — caisse commune. */
+export const CONTRIBUTION_START_YEAR = 2026;
+export const CONTRIBUTION_MONTHLY_AMOUNT = 5000;
+export const CONTRIBUTION_PAGE_SIZE = 10;
+export const NOTIFICATION_MAX_ATTEMPTS = 5;
+export const CASH_MANAGER_EMAIL = 'mahefa.madasoftware@gmail.com';
+
+export const FRENCH_MONTHS = [
+  'Janvier',
+  'Février',
+  'Mars',
+  'Avril',
+  'Mai',
+  'Juin',
+  'Juillet',
+  'Août',
+  'Septembre',
+  'Octobre',
+  'Novembre',
+  'Décembre',
+] as const;
+
+export interface InitialContributionMember {
+  name: string;
+  email: string;
+  canValidate?: boolean;
+}
+
+/** Liste initiale stable des dix participants. Les comptes Gere-o ne sont pas créés ici. */
+export const INITIAL_CONTRIBUTION_MEMBERS: InitialContributionMember[] = [
+  { name: 'Mahefa', email: 'mahefa.madasoftware@gmail.com', canValidate: true },
+  { name: 'Sambany', email: 'sambany.madasoftware@gmail.com' },
+  { name: 'Tsiresy', email: 'tsiresy.madasoftware@gmail.com', canValidate: true },
+  { name: 'Charlot', email: 'charlot.madasoftware@gmail.com' },
+  { name: 'Nico', email: 'alfrednico@gmail.com' },
+  { name: 'Mamy', email: 'mamy.madasoftware@gmail.com' },
+  { name: 'Samuel', email: 'samuel.madasoftware@gmail.com' },
+  { name: 'Stephanie', email: 'stephannie.madasoftware@gmail.com' },
+  { name: 'Tiavina', email: 'tiavina.madasoftware@gmail.com' },
+  { name: 'Johary', email: 'johary.madasoftware@gmail.com' },
+];
+
+export const INITIAL_EXPENSE_CATEGORIES = [
+  { name: 'FAHASOAVANA', label: 'Fahasoavana' },
+  { name: 'HOSPITALISATION', label: 'Hospitalisation' },
+  { name: 'FAHORIANA', label: 'Fahoriana' },
+  { name: 'AUTRE', label: 'Autre' },
+] as const;

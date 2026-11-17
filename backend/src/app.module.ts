@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { ContributionsModule } from './contributions/contributions.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EmailModule } from './email/email.module';
 import { LeavesModule } from './leaves/leaves.module';
@@ -29,6 +30,7 @@ import configuration from './config/configuration';
     DashboardModule,
     CalendarModule,
     EmailModule,
+    ContributionsModule,
   ],
 })
 export class AppModule {}

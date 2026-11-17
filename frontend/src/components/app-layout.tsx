@@ -8,17 +8,39 @@ type IconName =
   | 'calendar'
   | 'umbrella'
   | 'file'
+  | 'wallet'
   | 'user'
   | 'logout'
   | 'menu'
   | 'close';
 
-const NAV_ITEMS: Array<{ to: string; label: string; icon: IconName }> = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: IconName;
+  subItems?: Array<{ to: string; label: string }>;
+}
+
+const FINANCE_SUB_ITEMS = [
+  { to: '/cotisations', label: 'Tableau de bord' },
+  { to: '/cotisations/cotisations', label: 'Cotisations' },
+  { to: '/cotisations/depenses', label: 'Dépenses' },
+  { to: '/cotisations/membres', label: 'Membres' },
+  { to: '/cotisations/journal', label: 'Historique de la caisse' },
+];
+
+const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Ma journée', icon: 'clock' },
   { to: '/dashboard', label: 'Tableau de bord', icon: 'grid' },
   { to: '/calendrier', label: 'Calendrier', icon: 'calendar' },
   { to: '/conges', label: 'Mes congés', icon: 'umbrella' },
   { to: '/rapports', label: 'Rapports', icon: 'file' },
+  {
+    to: '/cotisations',
+    label: 'Cotisations',
+    icon: 'wallet',
+    subItems: FINANCE_SUB_ITEMS,
+  },
   { to: '/profil', label: 'Mon profil', icon: 'user' },
 ];
 
@@ -73,6 +95,13 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
           <path d="M14 2v6h6M8 13h8M8 17h5" />
         </svg>
       );
+    case 'wallet':
+      return (
+        <svg {...common}>
+          <rect x="3" y="6" width="18" height="13" rx="3" />
+          <path d="M3 10h18M16 15h2" />
+        </svg>
+      );
     case 'user':
       return (
         <svg {...common}>
@@ -114,6 +143,9 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [financeOpen, setFinanceOpen] = useState(() =>
+    location.pathname.startsWith('/cotisations'),
+  );
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -160,20 +192,57 @@ export function AppLayout() {
         </Link>
 
         <nav className="app-sidebar__nav" aria-label="Navigation principale">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="sidebar-link"
-              data-label={item.label}
-              aria-label={item.label}
-              aria-current={location.pathname === item.to ? 'page' : undefined}
-              onClick={closeMenu}
-            >
-              <Icon name={item.icon} />
-              <span className="sidebar-link__label">{item.label}</span>
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            if (item.subItems) {
+              const isActive = location.pathname.startsWith('/cotisations');
+              return (
+                <div className="sidebar-group" key={item.to}>
+                  <button
+                    type="button"
+                    className={`sidebar-link sidebar-link--group ${financeOpen ? 'is-open' : ''} ${isActive ? 'is-active' : ''}`}
+                    data-label={item.label}
+                    aria-label={item.label}
+                    aria-expanded={financeOpen}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => setFinanceOpen((value) => !value)}
+                  >
+                    <Icon name={item.icon} />
+                    <span className="sidebar-link__label">{item.label}</span>
+                  </button>
+                  {financeOpen && (
+                    <div className="sidebar-flyout" role="menu" aria-label="Sous-menu Cotisations">
+                      {item.subItems.map((sub) => (
+                        <Link
+                          key={sub.to}
+                          to={sub.to}
+                          role="menuitem"
+                          className={`sidebar-flyout__link ${location.pathname === sub.to ? 'is-current' : ''}`}
+                          onClick={closeMenu}
+                        >
+                          {sub.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="sidebar-link"
+                data-label={item.label}
+                aria-label={item.label}
+                aria-current={location.pathname === item.to ? 'page' : undefined}
+                onClick={closeMenu}
+              >
+                <Icon name={item.icon} />
+                <span className="sidebar-link__label">{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         {user && (
