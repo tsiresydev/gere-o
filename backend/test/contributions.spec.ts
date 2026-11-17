@@ -111,7 +111,79 @@ describe('Module Cotisations — règles métier', () => {
       user,
     );
 
+  const declareOne = () => service.declare({ months: [months[0]], year, paymentDate }, employee);
+
+  describe('Gestion des membres', () => {
+    it('modifie un membre initial sans conserver le lien vers son ancien compte', async () => {
+      const member = memberModel.docs.find(
+        (item: { email: string }) => item.email === employee.email,
+      );
+      const id = String(member._id);
+      const updated = await service.updateMember(id, {
+        name: 'Nouveau nom', email: 'nouveau@example.com',
+      });
+      expect(updated.name).toBe('Nouveau nom');
+      expect(updated.email).toBe('nouveau@example.com');
+      expect(member.userId).toBeUndefined();
+      expect(member.seedKey).toBe(employee.email);
+      expect(updated.id).toBe(id);
+    });
+
+    it('désactive puis réactive sans supprimer les cotisations', async () => {
+      const declaration = await declareOne();
+      const id = declaration.items[0].memberId;
+      await service.updateMember(id, { status: 'INACTIVE' as never });
+      await expect(declareOne()).rejects.toBeInstanceOf(ForbiddenException);
+      await service.updateMember(id, { status: 'ACTIVE' as never });
+      expect(contributionModel.docs).toHaveLength(1);
+      expect(cashModel.docs).toHaveLength(1);
+      await expect(declareOne()).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
   describe('Déclarations', () => {
+    it('autorise les cotisations futures et refuse leur double déclaration', async () => {
+      const input = { months: [1, 2], year: year + 1, paymentDate };
+      const result = await service.declare(input, employee);
+
+      expect(result.items.map((item) => item.periodMonth)).toEqual([1, 2]);
+      expect(result.items.every((item) => item.status === 'VALIDE')).toBe(true);
+      expect(cashModel.docs).toHaveLength(2);
+      expect(cashModel.docs[1].balanceAfter).toBe(10000);
+      await expect(service.declare(input, employee)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('autorise un mois futur de l’année courante', async () => {
+      if (currentMonth === 12) return;
+      const result = await service.declare(
+        { months: [currentMonth + 1], year, paymentDate }, employee,
+      );
+      expect(result.items[0].status).toBe('VALIDE');
+    });
+
+    it('ordonne les insertions lors d’une déclaration avec session MongoDB', async () => {
+      const session = {
+        withTransaction: async (callback: () => Promise<void>) => callback(),
+        endSession: jest.fn().mockResolvedValue(undefined),
+      };
+      const connection = {
+        db: { admin: () => ({ command: async () => ({ setName: 'rs0' }) }) },
+        startSession: async () => session,
+      };
+      const ledger = new CashLedgerService(cashModel, connection as never);
+      Object.assign(service, { ledger });
+      const create = jest.spyOn(contributionModel, 'create');
+
+      const result = await declare(employee);
+
+      expect(result.items).toHaveLength(months.length);
+      expect(create).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ session, ordered: true }),
+      );
+      expect(session.endSession).toHaveBeenCalledTimes(1);
+    });
+
     it('crée un enregistrement par mois reliés par un même groupe', async () => {
       const result = await declare(employee);
 
@@ -122,9 +194,14 @@ describe('Module Cotisations — règles métier', () => {
         expect(item.periodYear).toBe(year);
         expect(item.declaredAmount).toBe(5000);
         expect(item.expectedAmount).toBe(5000);
-        expect(item.status).toBe('EN_ATTENTE_DE_VALIDATION');
+        expect(item.status).toBe('VALIDE');
+        expect(item.validatedAt).toBeDefined();
+        expect(item.validatedBy).toBeUndefined();
       });
       expect(contributionModel.docs).toHaveLength(months.length);
+      expect(cashModel.docs).toHaveLength(months.length);
+      expect(cashModel.docs.map((entry: { balanceAfter: number }) => entry.balanceAfter))
+        .toEqual(months.map((_, index) => (index + 1) * 5000));
     });
 
     it('envoie une notification au payeur avec les autres membres actifs en copie', async () => {
@@ -137,8 +214,26 @@ describe('Module Cotisations — règles métier', () => {
       expect(log.recipients.cc).toContain(tsiresy.email);
       expect(log.recipients.cc).not.toContain(employee.email);
       expect(new Set(log.recipients.cc).size).toBe(log.recipients.cc.length);
+      expect(log.subject).toBe('Déclaration de cotisation - Sambany');
+      expect(log.html).toContain('Solde de la caisse après cette déclaration');
+      expect(log.html).toContain(new Intl.NumberFormat('fr-FR').format(months.length * 5000));
+      expect(log.html).toContain('Validée automatiquement');
+      expect(log.html).not.toContain('La validation sera effectuée');
+      expect(log.html).not.toContain('En attente de validation');
       expect(email.sendMail).toHaveBeenCalledTimes(1);
       expect(email.sendMail.mock.calls[0][0].to).toEqual([{ email: employee.email }]);
+    });
+
+    it('inclut le solde après la déclaration en tenant compte des opérations précédentes', async () => {
+      await cashModel.create([{ direction: 'IN', amount: 7000 }]);
+      await cashModel.create([{ direction: 'OUT', amount: 2000 }]);
+
+      await declare(employee);
+
+      const expectedBalance = 5000 + months.length * 5000;
+      expect(notificationModel.docs[0].html).toContain(
+        `${new Intl.NumberFormat('fr-FR').format(expectedBalance)} Ar`,
+      );
     });
 
     it('calcule le montant côté backend et ignore un montant envoyé par le client', async () => {
@@ -180,7 +275,15 @@ describe('Module Cotisations — règles métier', () => {
   });
 
   describe('Validation et refus', () => {
-    const pending = async () => (await declare(employee)).items[0];
+    // Simule une ancienne déclaration créée avant la validation automatique.
+    const pending = async () => {
+      const declaration = (await declareOne()).items[0];
+      contributionModel.docs[0].status = 'EN_ATTENTE_DE_VALIDATION';
+      delete contributionModel.docs[0].validatedAt;
+      delete contributionModel.docs[0].validatedAmount;
+      cashModel.docs.splice(0);
+      return declaration;
+    };
 
     it('valide en comptabilisant l’entrée sans nouvel email', async () => {
       const declaration = await pending();
@@ -239,8 +342,7 @@ describe('Module Cotisations — règles métier', () => {
 
   describe('Dépenses', () => {
     beforeEach(async () => {
-      const declaration = (await declare(employee)).items[0];
-      await service.validate(declaration.id, tsiresy);
+      await declareOne();
     });
 
     it('enregistre une dépense avec contrôle du solde et notification ciblée', async () => {
@@ -289,8 +391,7 @@ describe('Module Cotisations — règles métier', () => {
 
   describe('Solde, journal et KPI', () => {
     it('calcule solde = entrées validées − sorties enregistrées', async () => {
-      const declaration = (await declare(employee)).items[0];
-      await service.validate(declaration.id, tsiresy);
+      await declareOne();
       await expensesService.create(
         { description: 'Hospitalisation', category: 'HOSPITALISATION', amount: 3000, expenseDate: paymentDate },
         tsiresy,
@@ -304,8 +405,7 @@ describe('Module Cotisations — règles métier', () => {
     });
 
     it('conserve l’opération d’origine lors d’une correction', async () => {
-      const declaration = (await declare(employee)).items[0];
-      await service.validate(declaration.id, tsiresy);
+      await declareOne();
       const original = cashModel.docs[0];
 
       const correction = await new CashLedgerService(cashModel, fakeConnection as never).correct(

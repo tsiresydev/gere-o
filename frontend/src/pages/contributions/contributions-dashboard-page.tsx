@@ -122,20 +122,10 @@ export function ContributionsDashboardPage() {
           <strong className="kpi-card__value">{formatAr(overview.totalExpenses)}</strong>
           <p className="kpi-card__note">Sorties comptabilisées sur la période</p>
         </article>
-        <article className="kpi-card kpi-card--warm">
-          <div className="kpi-card__top"><span className="kpi-card__label">À valider</span><span className="kpi-card__icon">…</span></div>
-          <strong className="kpi-card__value">{overview.pendingCount}</strong>
-          <p className="kpi-card__note">Déclarations en attente de validation</p>
-        </article>
         <article className="kpi-card kpi-card--dark">
           <div className="kpi-card__top"><span className="kpi-card__label">En retard</span><span className="kpi-card__icon">!</span></div>
           <strong className="kpi-card__value">{overview.lateMembers}</strong>
           <p className="kpi-card__note">Membres avec une période non réglée</p>
-        </article>
-        <article className="kpi-card kpi-card--dark">
-          <div className="kpi-card__top"><span className="kpi-card__label">Membres à jour</span><span className="kpi-card__icon">{overview.activeMembers}</span></div>
-          <strong className="kpi-card__value">{overview.upToDateMembers} / {overview.activeMembers}</strong>
-          <p className="kpi-card__note">Membres actifs de la caisse commune</p>
         </article>
       </section>
 

@@ -30,6 +30,16 @@ export class CreateContributionMemberDto {
 
 export class UpdateContributionMemberDto {
   @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: "L'adresse email est invalide" })
+  email?: string;
+
+  @IsOptional()
   @IsEnum(ContributionMemberStatus, { message: 'Statut invalide' })
   status?: ContributionMemberStatus;
 

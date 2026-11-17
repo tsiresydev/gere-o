@@ -17,6 +17,7 @@ import {
   CONTRIBUTION_MONTHLY_AMOUNT,
   CONTRIBUTION_START_YEAR,
   FRENCH_MONTHS,
+  INITIAL_CONTRIBUTION_MEMBERS,
 } from '../config/constants';
 import { CashLedgerService, PageResult } from './cash-ledger.service';
 import { ContributionQueryDto } from './dto/contribution-query.dto';
@@ -371,8 +372,22 @@ export class ContributionsService {
     id: string,
     dto: UpdateContributionMemberDto,
   ): Promise<MemberRow> {
+    const existing = await this.memberModel.findById(id).exec();
+    if (!existing) throw new NotFoundException('Membre introuvable');
     const set: Record<string, unknown> = {};
     const unset: Record<string, unknown> = {};
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (name.length < 2) throw new BadRequestException('Nom invalide');
+      set.name = name;
+    }
+    if (dto.email !== undefined && dto.email.toLowerCase().trim() !== existing.email) {
+      set.email = dto.email.toLowerCase().trim();
+      unset.userId = 1;
+      if (!existing.seedKey && INITIAL_CONTRIBUTION_MEMBERS.some((item) => item.email === existing.email)) {
+        set.seedKey = existing.email;
+      }
+    }
     if (dto.status) set.status = dto.status;
     if (dto.canValidate !== undefined) set.canValidate = dto.canValidate;
     if (dto.status === ContributionMemberStatus.INACTIVE) {
@@ -382,7 +397,9 @@ export class ContributionsService {
       unset.deactivatedAt = 1;
     }
 
-    const member = await this.memberModel
+    let member: ContributionMemberDocument | null;
+    try {
+      member = await this.memberModel
       .findByIdAndUpdate(
         id,
         {
@@ -391,7 +408,11 @@ export class ContributionsService {
         },
         { new: true },
       )
-      .exec();
+        .exec();
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw new ConflictException('Ce membre existe déjà');
+      throw error;
+    }
     if (!member) throw new NotFoundException('Membre introuvable');
     const rows = await this.listMembers();
     return rows.find((row) => row.id === member._id.toString()) as MemberRow;
@@ -438,21 +459,6 @@ export class ContributionsService {
   ): Promise<{ items: ContributionRow[]; groupId: string }> {
     const member = await this.resolveMember(dto.memberId, user);
     const months = [...new Set(dto.months)].sort((a, b) => a - b);
-    const now = new Date();
-    const currentYear = now.getUTCFullYear();
-    const currentMonth = now.getUTCMonth() + 1;
-
-    for (const month of months) {
-      if (
-        dto.year > currentYear ||
-        (dto.year === currentYear && month > currentMonth)
-      ) {
-        throw new BadRequestException(
-          'Impossible de déclarer une cotisation pour un mois futur',
-        );
-      }
-    }
-
     const uniqueKeys = months.map((month) =>
       keyOf(member._id, { year: dto.year, month }),
     );
@@ -471,6 +477,7 @@ export class ContributionsService {
     const groupId = new Types.ObjectId().toString();
     const total = months.length * CONTRIBUTION_MONTHLY_AMOUNT;
     const paymentDate = new Date(`${dto.paymentDate}T00:00:00.000Z`);
+    const declaredAt = new Date();
     const docs = months.map(
       (month) =>
         ({
@@ -481,10 +488,12 @@ export class ContributionsService {
           declaredAmount: CONTRIBUTION_MONTHLY_AMOUNT,
           paymentDate,
           paymentMethod: dto.paymentMethod,
-          status: ContributionStatus.EN_ATTENTE_DE_VALIDATION,
+          status: ContributionStatus.VALIDE,
           uniqueKey: keyOf(member._id, { year: dto.year, month }),
           declaredBy: new Types.ObjectId(user.id),
-          declaredAt: new Date(),
+          declaredAt,
+          validatedAt: declaredAt,
+          validatedAmount: CONTRIBUTION_MONTHLY_AMOUNT,
           declarationGroupId: groupId,
           notes: dto.notes,
         }) as Contribution,
@@ -494,12 +503,30 @@ export class ContributionsService {
     let logId: string;
     try {
       const result = await this.ledger.runInTransaction(async (session) => {
-        const inserted = await this.contributionModel.create(docs, { session });
+        const inserted = await this.contributionModel.create(docs, { session, ordered: true });
+        let balance = await this.ledger.getBalance(session);
+        for (const contribution of inserted) {
+          balance += contribution.declaredAmount;
+          await this.ledger.createEntry(
+            {
+              type: CashTransactionType.CONTRIBUTION_VALIDEE,
+              direction: CashDirection.IN,
+              amount: contribution.declaredAmount,
+              description: `Cotisation validée automatiquement — ${FRENCH_MONTHS[contribution.periodMonth - 1]} ${contribution.periodYear}`,
+              createdBy: new Types.ObjectId(user.id),
+              createdByName: this.fullName(user),
+              contributionId: contribution._id,
+              balanceAfter: balance,
+            },
+            session,
+          );
+        }
         const email = this.notifications.buildContributionEmail(
           member.name,
           months,
           dto.year,
           total,
+          balance,
         );
         const log = await this.notifications.enqueue(
           {

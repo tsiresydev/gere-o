@@ -50,7 +50,7 @@ export const contributionsService = {
 
   updateMember(
     id: string,
-    input: { status?: 'ACTIVE' | 'INACTIVE'; canValidate?: boolean },
+    input: { name?: string; email?: string; status?: 'ACTIVE' | 'INACTIVE'; canValidate?: boolean },
   ): Promise<MemberRow> {
     return api<MemberRow>(`/contributions/members/${id}`, {
       method: 'PATCH',

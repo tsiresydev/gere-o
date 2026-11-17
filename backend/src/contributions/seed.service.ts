@@ -42,11 +42,12 @@ export class ContributionSeedService implements OnModuleInit {
 
     for (const member of INITIAL_CONTRIBUTION_MEMBERS) {
       await this.memberModel.updateOne(
-        { email: member.email },
+        { $or: [{ seedKey: member.email }, { email: member.email }] },
         {
           $setOnInsert: {
             name: member.name,
             email: member.email,
+            seedKey: member.email,
             status: ContributionMemberStatus.ACTIVE,
             canValidate: member.canValidate ?? false,
             joinedAt: new Date(),

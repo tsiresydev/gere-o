@@ -15,6 +15,9 @@ export class ContributionMember {
   @Prop({ required: true, lowercase: true, trim: true })
   email: string;
 
+  @Prop()
+  seedKey?: string;
+
   @Prop({
     required: true,
     enum: ContributionMemberStatus,
@@ -41,5 +44,6 @@ export const ContributionMemberSchema =
   SchemaFactory.createForClass(ContributionMember);
 
 ContributionMemberSchema.index({ email: 1 }, { unique: true });
+ContributionMemberSchema.index({ seedKey: 1 }, { unique: true, sparse: true });
 ContributionMemberSchema.index({ userId: 1 }, { unique: true, sparse: true });
 ContributionMemberSchema.index({ status: 1, name: 1 });

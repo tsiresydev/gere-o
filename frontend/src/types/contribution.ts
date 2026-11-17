@@ -9,7 +9,7 @@ export const CONTRIBUTION_STATUS_LABELS: Record<ContributionStatus, string> = {
   NON_PAYE: 'Non payé',
   EN_RETARD: 'En retard',
   EN_ATTENTE_DE_VALIDATION: 'En attente de validation',
-  VALIDE: 'Validé',
+  VALIDE: 'Payé',
   REFUSE: 'Refusé',
 };
 

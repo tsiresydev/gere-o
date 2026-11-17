@@ -18,6 +18,7 @@ Nouvelle caisse commune, sans reprise d’anciennes données. Le suivi des cotis
 | Justificatif de dépense | Supprimé du périmètre : aucun champ, aucun upload, aucune dépendance associée. |
 | Validation | Réservée à Tsiresy et Mahefa via un droit propre au module Cotisations, sans changer leur rôle Gere-o global. |
 | Notifications | Envoyées dès l’enregistrement de la déclaration ou de la dépense. Aucun second email automatique à la validation. |
+| Validation automatique | Chaque nouveau mois déclaré est immédiatement validé et comptabilisé. Les anciennes déclarations en attente restent soumises à la validation manuelle. |
 
 ## Membres initiaux
 
@@ -38,13 +39,15 @@ Nouvelle caisse commune, sans reprise d’anciennes données. Le suivi des cotis
 
 - `NON_PAYE` : mois à venir ou mois courant sans déclaration.
 - `EN_RETARD` : mois passé sans déclaration validée.
-- `EN_ATTENTE_DE_VALIDATION` : déclaration enregistrée, en attente d’un validateur.
+- `EN_ATTENTE_DE_VALIDATION` : ancienne déclaration enregistrée, en attente d’un validateur.
 - `VALIDE` : déclaration validée, montant comptabilisé dans la caisse.
 - `REFUSE` : déclaration refusée ; le membre peut déclarer à nouveau le mois concerné.
 
 ## Règles financières
 
 - Une déclaration peut porter sur plusieurs mois : un enregistrement par mois, liés par un `declarationGroupId`.
+- Les mois futurs peuvent être déclarés et payés à l’avance, y compris pour les années suivantes.
+- Chaque mois nouvellement déclaré est validé automatiquement et crée une entrée de caisse ; aucune personne n'est présentée comme validateur de cette décision automatique.
 - Le montant attendu est toujours calculé par le backend : `nombre de mois × 5 000`.
 - Un même mois ne peut pas être déclaré deux fois tant qu’une déclaration est en attente ou validée.
 - Seules les cotisations `VALIDE` entrent dans la caisse. Une validation est irréversible ; une correction ultérieure crée une opération distincte tracée.
@@ -69,7 +72,7 @@ Ces droits sont vérifiés côté backend et n’existent que dans le module Cot
 
 ## Notifications
 
-- **Déclaration** : TO = membre déclarateur ; CC = autres membres actifs ; objet `Déclaration de cotisation – [Mois / Année]`.
+- **Déclaration** : TO = membre concerné ; CC = autres membres actifs ; objet `Déclaration de cotisation - [Nom du membre]` ; le message indique le solde après la déclaration.
 - **Dépense** : TO = Mahefa ; CC = autres membres actifs ; objet `Notification de dépense – [Motif / Date]`.
 - Destinataires dédupliqués, adresses issues du module.
 - Journal `NotificationLog` avec outbox : l’enregistrement financier reste valide si SMTP échoue ; nouvelle tentative manuelle ou automatique sans doublon.

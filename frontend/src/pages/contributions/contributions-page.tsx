@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError } from '../../services/api';
 import { contributionsService } from '../../services/contributions.service';
 import { useFinanceAccess } from '../../hooks/use-finance-access';
-import { ConfirmModal, EmptyFinance, FinancePagination, StatusBadge, formatAr } from '../../components/finance-ui';
+import { EmptyFinance, StatusBadge, formatAr } from '../../components/finance-ui';
 import { Toast, useToast } from '../../components/toast';
 import type { ContributionFilters, ContributionRow, ContributionStatus } from '../../types/contribution';
 import { CONTRIBUTION_STATUS_LABELS, FINANCE_MONTHS } from '../../types/contribution';
@@ -13,8 +13,6 @@ interface DeclarationForm {
   months: number[];
   year: number;
   paymentDate: string;
-  paymentMethod: string;
-  notes: string;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -23,8 +21,6 @@ const initialForm = (memberId = ''): DeclarationForm => ({
   months: [],
   year: new Date().getFullYear(),
   paymentDate: today(),
-  paymentMethod: '',
-  notes: '',
 });
 
 export function ContributionsPage() {
@@ -32,29 +28,43 @@ export function ContributionsPage() {
   const { notice, notify, clear } = useToast();
   const [rows, setRows] = useState<ContributionRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<ContributionFilters>({ page: 1, limit: 10 });
+  const [filters, setFilters] = useState<ContributionFilters>({ page: 1, limit: 100, year: new Date().getFullYear() });
   const [search, setSearch] = useState('');
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const requestRef = useRef(0);
   const [form, setForm] = useState<DeclarationForm>(() => initialForm());
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [decision, setDecision] = useState<{ row: ContributionRow; action: 'VALIDER' | 'REFUSER' } | null>(null);
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [availabilityRevision, setAvailabilityRevision] = useState(0);
+  const [availability, setAvailability] = useState<{
+    key: string;
+    rows: ContributionRow[];
+    error?: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
+    const request = ++requestRef.current;
     await Promise.resolve();
     setLoading(true);
     try {
-      const page = await contributionsService.list(filters);
-      setRows(page.items);
-      setTotal(page.total);
-      setTotalPages(page.totalPages);
+      const first = await contributionsService.list({ ...filters, page: 1, limit: 100 });
+      const remaining = await Promise.all(
+        Array.from({ length: first.totalPages - 1 }, (_, index) =>
+          contributionsService.list({ ...filters, page: index + 2, limit: 100 }),
+        ),
+      );
+      if (request !== requestRef.current) return;
+      setRows([first, ...remaining].flatMap((page) => page.items));
+      setTotal(first.total);
     } catch (err) {
+      if (request !== requestRef.current) return;
+      setRows([]);
+      setTotal(0);
       notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Impossible de charger les cotisations.' });
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   }, [filters, notify]);
 
@@ -62,10 +72,44 @@ export function ContributionsPage() {
     const timer = window.setTimeout(() => {
       void load();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); requestRef.current += 1; };
   }, [load]);
 
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (detailId && dialog && !dialog.open) dialog.showModal();
+    if (!detailId && dialog?.open) dialog.close();
+  }, [detailId]);
+
+  const groups = Array.from(rows.reduce((map, row) => {
+    const group = map.get(row.memberId) ?? { id: row.memberId, name: row.memberName, email: row.memberEmail, rows: [] as ContributionRow[] };
+    group.rows.push(row);
+    map.set(row.memberId, group);
+    return map;
+  }, new Map<string, { id: string; name: string; email: string; rows: ContributionRow[] }>()).values())
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  const detail = groups.find((group) => group.id === detailId);
+
   const selectedMemberId = form.memberId || member?.id || '';
+  const availabilityKey = `${selectedMemberId}:${form.year}:${availabilityRevision}`;
+  const availabilityReady = availability?.key === availabilityKey;
+  const availabilityError = availabilityReady ? availability.error : undefined;
+  const monthStatuses = availabilityReady && !availabilityError
+    ? new Map(availability.rows.map((row) => [row.periodMonth, row.status]))
+    : new Map<number, ContributionStatus>();
+
+  useEffect(() => {
+    if (!formOpen || !selectedMemberId || form.year < 2026 || !Number.isInteger(form.year)) return;
+    let cancelled = false;
+    contributionsService.list({ memberId: selectedMemberId, year: form.year, page: 1, limit: 12 })
+      .then((page) => {
+        if (!cancelled) setAvailability({ key: availabilityKey, rows: page.items });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setAvailability({ key: availabilityKey, rows: [], error: err instanceof ApiError ? err.message : 'Impossible de vérifier les mois déjà déclarés.' });
+      });
+    return () => { cancelled = true; };
+  }, [formOpen, selectedMemberId, form.year, availabilityKey]);
 
   const applyFilters = (event: FormEvent): void => {
     event.preventDefault();
@@ -74,6 +118,7 @@ export function ContributionsPage() {
 
   const openForm = (): void => {
     setForm(initialForm(member?.id ?? ''));
+    setAvailabilityRevision((revision) => revision + 1);
     setFormOpen(true);
   };
 
@@ -88,6 +133,7 @@ export function ContributionsPage() {
 
   const submitDeclaration = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
+    if (!availabilityReady || availabilityError) return;
     if (!selectedMemberId || form.months.length === 0) {
       notify({ type: 'error', text: 'Sélectionnez un membre et au moins un mois.' });
       return;
@@ -99,37 +145,14 @@ export function ContributionsPage() {
         months: form.months,
         year: form.year,
         paymentDate: form.paymentDate,
-        paymentMethod: form.paymentMethod || undefined,
-        notes: form.notes || undefined,
       });
-      notify({ type: 'success', text: `${form.months.length} cotisation(s) déclarée(s). Notification envoyée.` });
+      notify({ type: 'success', text: `${form.months.length} cotisation(s) déclarée(s) et validée(s) automatiquement.` });
       setFormOpen(false);
       await load();
     } catch (err) {
       notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Déclaration impossible.' });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const confirmDecision = async (): Promise<void> => {
-    if (!decision) return;
-    setBusy(true);
-    try {
-      if (decision.action === 'VALIDER') {
-        await contributionsService.validate(decision.row.id);
-        notify({ type: 'success', text: 'Cotisation validée et comptabilisée.' });
-      } else {
-        await contributionsService.reject(decision.row.id, reason);
-        notify({ type: 'success', text: 'Déclaration refusée.' });
-      }
-      setDecision(null);
-      setReason('');
-      await load();
-    } catch (err) {
-      notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Action impossible.' });
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -142,7 +165,7 @@ export function ContributionsPage() {
         <div>
           <span className="page__eyebrow">Caisse commune · 5 000 Ar / mois</span>
           <h1>Suivi des cotisations</h1>
-          <p className="page-header__subtitle">{total} période(s) suivie(s) depuis janvier 2026.</p>
+          <p className="page-header__subtitle">Consultez les cotisations par membre depuis janvier 2026.</p>
         </div>
         <button type="button" className="button button--primary" onClick={openForm} disabled={accessLoading || !member}>Déclarer un paiement</button>
       </header>
@@ -169,7 +192,7 @@ export function ContributionsPage() {
         <label className="field"><span className="field__label">Statut</span>
           <select className="input" value={filters.status ?? ''} onChange={(event) => setFilters((p) => ({ ...p, status: (event.target.value || undefined) as ContributionStatus | undefined, page: 1 }))}>
             <option value="">Tous</option>
-            {Object.entries(CONTRIBUTION_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {(['NON_PAYE', 'VALIDE', 'EN_RETARD'] as const).map((value) => <option key={value} value={value}>{CONTRIBUTION_STATUS_LABELS[value]}</option>)}
           </select>
         </label>
         <label className="field"><span className="field__label">Recherche</span>
@@ -179,40 +202,40 @@ export function ContributionsPage() {
       </form>
 
       <section className="card table-card">
-        <div className="section-head"><div><h2 className="section-head__title">Périodes de cotisation</h2><p className="section-head__subtitle">Déclarations, validations et retards</p></div></div>
+        <div className="section-head"><div><h2 className="section-head__title">Cotisations par membre</h2><p className="section-head__subtitle">{groups.length} membre(s) · {total} période(s) correspondant aux filtres</p></div></div>
         {loading ? <p className="finance-empty-inline">Chargement…</p> : rows.length === 0 ? (
           <EmptyFinance title="Aucune cotisation trouvée" hint="Modifiez les filtres ou déclarez un paiement." />
         ) : (
-          <>
             <div className="table-wrap">
               <table className="data-table finance-table">
-                <thead><tr><th>Membre</th><th>Période</th><th>Attendu</th><th>Déclaré</th><th>Statut</th><th>Déclaration</th><th>Validation</th><th>Validateur</th>{isValidator && <th>Actions</th>}</tr></thead>
+                <thead><tr><th>Membre</th><th>Périodes</th><th>Payées</th><th>En retard</th><th>Détail</th></tr></thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td><strong>{row.memberName}</strong><br /><span className="card__note">{row.memberEmail}</span></td>
-                      <td className="data-table__date">{row.monthLabel}</td>
-                      <td>{formatAr(row.expectedAmount)}</td>
-                      <td className="data-table__value">{row.declaredAmount > 0 ? formatAr(row.declaredAmount) : '—'}</td>
-                      <td><StatusBadge status={row.status} /></td>
-                      <td>{row.paymentDate ?? '—'}{row.paymentMethod ? <><br /><span className="card__note">{row.paymentMethod}</span></> : null}</td>
-                      <td>{row.validatedAt ?? '—'}</td>
-                      <td>{row.validatedBy ?? '—'}</td>
-                      {isValidator && <td>{row.status === 'EN_ATTENTE_DE_VALIDATION' && !row.isSynthetic ? (
-                        <div className="finance-actions">
-                          <button type="button" className="button button--primary button--small" onClick={() => setDecision({ row, action: 'VALIDER' })}>Valider</button>
-                          <button type="button" className="button button--ghost button--small" onClick={() => setDecision({ row, action: 'REFUSER' })}>Refuser</button>
-                        </div>
-                      ) : '—'}</td>}
+                  {groups.map((group) => (
+                    <tr key={group.id}>
+                      <td><strong>{group.name}</strong><br /><span className="card__note">{group.email}</span></td>
+                      <td>{group.rows.length}</td>
+                      <td>{group.rows.filter((row) => row.status === 'VALIDE').length}</td>
+                      <td>{group.rows.filter((row) => row.status === 'EN_RETARD').length}</td>
+                      <td><button type="button" className="button button--ghost button--small" onClick={() => setDetailId(group.id)} aria-label={`Voir les cotisations de ${group.name}`}>Voir les mois</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <FinancePagination page={filters.page ?? 1} totalPages={totalPages} onChange={(page) => setFilters((p) => ({ ...p, page }))} />
-          </>
         )}
       </section>
+
+      <dialog ref={dialogRef} className="modal contribution-detail-dialog" aria-labelledby="contribution-detail-title" onClose={() => setDetailId(null)}>
+        {detail && <>
+          <div className="modal__header"><div><h2 className="modal__title" id="contribution-detail-title">Cotisations de {detail.name}</h2><p className="card__note">{detail.email} · {detail.rows.length} période(s) selon les filtres</p></div><button type="button" className="modal__close" onClick={() => dialogRef.current?.close()} aria-label="Fermer">×</button></div>
+          <div className="modal__body">
+            <table className="data-table contribution-detail-table"><thead><tr><th>Période</th><th>Déclaré</th><th>Statut</th><th>Date de paiement</th></tr></thead><tbody>
+              {detail.rows.map((row) => <tr key={row.id}><td data-label="Période">{row.monthLabel}</td><td data-label="Déclaré">{row.declaredAmount > 0 ? formatAr(row.declaredAmount) : '—'}</td><td data-label="Statut"><StatusBadge status={row.status} /></td><td data-label="Date de paiement"><span>{row.paymentDate ?? '—'}{row.paymentMethod ? <><br /><span className="card__note">{row.paymentMethod}</span></> : null}</span></td></tr>)}
+            </tbody></table>
+          </div>
+          <div className="modal__footer"><button type="button" className="button button--primary" onClick={() => dialogRef.current?.close()}>Fermer</button></div>
+        </>}
+      </dialog>
 
       {formOpen && (
         <div className="modal-overlay" role="presentation" onMouseDown={() => setFormOpen(false)}>
@@ -220,53 +243,42 @@ export function ContributionsPage() {
             <div className="modal__header"><h2 className="modal__title">Déclarer une cotisation</h2><button type="button" className="modal__close" onClick={() => setFormOpen(false)} aria-label="Fermer">×</button></div>
             <div className="modal__body finance-form">
               <label className="field"><span className="field__label">Membre concerné</span>
-                <select className="input" value={selectedMemberId} onChange={(event) => setForm((p) => ({ ...p, memberId: event.target.value }))} disabled={!isValidator}>
+                <select className="input" value={selectedMemberId} onChange={(event) => setForm((p) => ({ ...p, memberId: event.target.value, months: [] }))} disabled={!isValidator}>
                   <option value="">Sélectionner un membre</option>
                   {members.filter((item) => item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name} — {item.email}</option>)}
                 </select>
               </label>
               <div className="field"><span className="field__label">Mois à payer</span>
                 <div className="finance-month-grid">
-                  {FINANCE_MONTHS.map((label, index) => (
-                    <label key={label} className={`finance-month ${form.months.includes(index + 1) ? 'finance-month--selected' : ''}`}>
-                      <input type="checkbox" checked={form.months.includes(index + 1)} onChange={() => toggleMonth(index + 1)} />
-                      <span>{label.slice(0, 3)}</span>
-                    </label>
-                  ))}
+                  {FINANCE_MONTHS.map((label, index) => {
+                    const status = monthStatuses.get(index + 1);
+                    const alreadyPaid = status === 'VALIDE';
+                    const pending = status === 'EN_ATTENTE_DE_VALIDATION';
+                    const disabled = !availabilityReady || Boolean(availabilityError) || alreadyPaid || pending;
+                    return (
+                      <label key={label} className={`finance-month ${form.months.includes(index + 1) ? 'finance-month--selected' : ''} ${disabled ? 'finance-month--disabled' : ''}`}>
+                        <input type="checkbox" disabled={disabled} checked={form.months.includes(index + 1)} onChange={() => toggleMonth(index + 1)} aria-label={`${label}${alreadyPaid ? ' — déjà payé' : pending ? ' — déjà déclaré' : ''}`} />
+                        <span>{label.slice(0, 3)}{alreadyPaid && <small>Payé</small>}{pending && <small>Déclaré</small>}</span>
+                      </label>
+                    );
+                  })}
                 </div>
+                {!availabilityReady && <p className="modal__hint" role="status">{!selectedMemberId ? 'Sélectionnez un membre.' : form.year < 2026 || !Number.isInteger(form.year) ? 'Indiquez une année valide à partir de 2026.' : 'Vérification des mois déjà payés…'}</p>}
+                {availabilityError && <p className="modal__hint" role="alert">{availabilityError} <button type="button" className="button button--ghost button--small" onClick={() => setAvailabilityRevision((revision) => revision + 1)}>Réessayer</button></p>}
+                {availabilityReady && !availabilityError && <p className="modal__hint">Les mois déjà payés ou déclarés ne peuvent pas être sélectionnés.</p>}
               </div>
               <div className="field-row">
-                <label className="field"><span className="field__label">Année</span><input className="input" type="number" min={2026} value={form.year} onChange={(event) => setForm((p) => ({ ...p, year: Number(event.target.value) }))} /></label>
+                <label className="field"><span className="field__label">Année</span><input className="input" type="number" min={2026} value={form.year} onChange={(event) => setForm((p) => ({ ...p, year: Number(event.target.value), months: [] }))} /></label>
                 <label className="field"><span className="field__label">Date du paiement</span><input className="input" type="date" value={form.paymentDate} onChange={(event) => setForm((p) => ({ ...p, paymentDate: event.target.value }))} /></label>
               </div>
-              <label className="field"><span className="field__label">Mode de paiement (facultatif)</span><input className="input" value={form.paymentMethod} onChange={(event) => setForm((p) => ({ ...p, paymentMethod: event.target.value }))} placeholder="Espèces, virement…" /></label>
-              <label className="field"><span className="field__label">Observation (facultative)</span><textarea className="input" rows={2} value={form.notes} onChange={(event) => setForm((p) => ({ ...p, notes: event.target.value }))} /></label>
+              <p className="modal__hint">Les mois sélectionnés seront validés et comptabilisés immédiatement.</p>
               <div className="finance-total"><span>Montant calculé automatiquement</span><strong>{formatAr(form.months.length * 5000)}</strong></div>
             </div>
-            <div className="modal__footer"><button type="button" className="button button--ghost" onClick={() => setFormOpen(false)}>Annuler</button><button type="submit" className="button button--primary" disabled={saving}>{saving ? 'Envoi…' : 'Déclarer'}</button></div>
+            <div className="modal__footer"><button type="button" className="button button--ghost" onClick={() => setFormOpen(false)}>Annuler</button><button type="submit" className="button button--primary" disabled={saving || !availabilityReady || Boolean(availabilityError)}>{saving ? 'Envoi…' : 'Déclarer'}</button></div>
           </form>
         </div>
       )}
 
-      <ConfirmModal
-        open={decision !== null}
-        title={decision?.action === 'VALIDER' ? 'Valider cette cotisation ?' : 'Refuser cette déclaration ?'}
-        busy={busy}
-        confirmLabel={decision?.action === 'VALIDER' ? 'Valider' : 'Refuser'}
-        onClose={() => setDecision(null)}
-        onConfirm={confirmDecision}
-      >
-        {decision && (
-          <>
-            <p><strong>{decision.row.memberName}</strong> — {decision.row.monthLabel} — {formatAr(decision.row.declaredAmount)}</p>
-            {decision.action === 'VALIDER' ? (
-              <p className="modal__hint">La validation est irréversible et comptabilise le montant dans la caisse. Aucun email supplémentaire ne sera envoyé.</p>
-            ) : (
-              <label className="field"><span className="field__label">Motif du refus</span><textarea className="input" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-            )}
-          </>
-        )}
-      </ConfirmModal>
     </div>
   );
 }
