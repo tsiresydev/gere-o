@@ -6,17 +6,23 @@ import type { ContributionRow, FinanceOverview } from '../../types/contribution'
 import { FinanceBarChart, FinanceDonut, formatAr } from '../../components/finance-ui';
 import { CATEGORIE_COLORS } from '../../types/contribution';
 
+const FRENCH_MONTHS = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
 export function ContributionsDashboardPage() {
   const [overview, setOverview] = useState<FinanceOverview | null>(null);
   const [pending, setPending] = useState<ContributionRow[]>([]);
   const [year, setYear] = useState<number | undefined>(undefined);
+  const [month, setMonth] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      contributionsService.overview(year),
+      contributionsService.overview(year, month),
       contributionsService.list({ status: 'EN_ATTENTE_DE_VALIDATION', limit: 5 }),
     ])
       .then(([data, rows]) => {
@@ -37,7 +43,7 @@ export function ContributionsDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [year]);
+  }, [year, month]);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from(
@@ -76,6 +82,19 @@ export function ContributionsDashboardPage() {
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
+          <label className="field">
+            <span className="field__label">Mois</span>
+            <select
+              className="input"
+              value={month ?? ''}
+              onChange={(event) => setMonth(event.target.value ? Number(event.target.value) : undefined)}
+            >
+              <option value="">Tous les mois</option>
+              {FRENCH_MONTHS.map((label, index) => (
+                <option key={label} value={index + 1}>{label}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </header>
 
@@ -93,15 +112,30 @@ export function ContributionsDashboardPage() {
             <span className="kpi-progress__meta"><span>{collectedPercent} % de l’attendu</span><span>{formatAr(overview.totalExpected)}</span></span>
           </div>
         </article>
+        <article className="kpi-card">
+          <div className="kpi-card__top"><span className="kpi-card__label">Montant attendu</span><span className="kpi-card__icon">○</span></div>
+          <strong className="kpi-card__value">{formatAr(overview.totalExpected)}</strong>
+          <p className="kpi-card__note">Sur la période sélectionnée</p>
+        </article>
         <article className="kpi-card kpi-card--warm">
           <div className="kpi-card__top"><span className="kpi-card__label">Dépenses</span><span className="kpi-card__icon">↑</span></div>
           <strong className="kpi-card__value">{formatAr(overview.totalExpenses)}</strong>
           <p className="kpi-card__note">Sorties comptabilisées sur la période</p>
         </article>
+        <article className="kpi-card kpi-card--warm">
+          <div className="kpi-card__top"><span className="kpi-card__label">À valider</span><span className="kpi-card__icon">…</span></div>
+          <strong className="kpi-card__value">{overview.pendingCount}</strong>
+          <p className="kpi-card__note">Déclarations en attente de validation</p>
+        </article>
         <article className="kpi-card kpi-card--dark">
-          <div className="kpi-card__top"><span className="kpi-card__label">Membres</span><span className="kpi-card__icon">10</span></div>
+          <div className="kpi-card__top"><span className="kpi-card__label">En retard</span><span className="kpi-card__icon">!</span></div>
+          <strong className="kpi-card__value">{overview.lateMembers}</strong>
+          <p className="kpi-card__note">Membres avec une période non réglée</p>
+        </article>
+        <article className="kpi-card kpi-card--dark">
+          <div className="kpi-card__top"><span className="kpi-card__label">Membres à jour</span><span className="kpi-card__icon">{overview.activeMembers}</span></div>
           <strong className="kpi-card__value">{overview.upToDateMembers} / {overview.activeMembers}</strong>
-          <p className="kpi-card__note">à jour · {overview.lateMembers} en retard</p>
+          <p className="kpi-card__note">Membres actifs de la caisse commune</p>
         </article>
       </section>
 
