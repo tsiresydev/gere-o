@@ -248,9 +248,11 @@ describe('Dashboard — API', () => {
         consumedDays: 5,
         pendingDays: 0,
         availableDays: 5,
-        consumedThisMonth: 5,
+        consumedThisMonth: Array.from({ length: 5 }, (_, index) => addDays(monday, 7 + index))
+          .filter((date) => date.slice(0, 7) === today.slice(0, 7)).length,
         holidaysThisMonth: 0,
-        workedDaysThisMonth: 2,
+        workedDaysThisMonth: [today, addDays(monday, -7)]
+          .filter((date) => date.slice(0, 7) === today.slice(0, 7)).length,
       });
     });
 

@@ -30,5 +30,7 @@ export default (): Record<string, unknown> => {
     smtpPassword: process.env.SMTP_PASSWORD ?? '',
     smtpFrom: process.env.SMTP_FROM ?? 'tsiresy.madasoftware@gmail.com',
     emailReportBcc: process.env.EMAIL_REPORT_BCC ?? 'tsiresyrabekoto@gmail.com',
+    reminderTriggerSecret: process.env.REMINDER_TRIGGER_SECRET ?? '',
+    reminderExtraHolidays: process.env.REMINDER_EXTRA_HOLIDAYS ?? '',
   };
 };

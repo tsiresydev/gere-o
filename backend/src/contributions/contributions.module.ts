@@ -9,6 +9,8 @@ import { ContributionsController } from './contributions.controller';
 import { ContributionsService } from './contributions.service';
 import { ContributionSeedService } from './seed.service';
 import { ExpensesService } from './expenses.service';
+import { ReminderController } from './reminder.controller';
+import { ContributionReminderService } from './reminder.service';
 import {
   NotificationProcessorService,
   NotificationsService,
@@ -49,7 +51,7 @@ import {
       { name: User.name, schema: UserSchema },
     ]),
   ],
-  controllers: [ContributionsController],
+  controllers: [ContributionsController, ReminderController],
   providers: [
     ContributionsService,
     ExpensesService,
@@ -58,6 +60,7 @@ import {
     NotificationProcessorService,
     ContributionValidatorGuard,
     ContributionSeedService,
+    ContributionReminderService,
   ],
   exports: [ContributionsService, ExpensesService, CashLedgerService, NotificationsService],
 })

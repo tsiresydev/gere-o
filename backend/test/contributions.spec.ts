@@ -437,6 +437,20 @@ describe('Module Cotisations — règles métier', () => {
   });
 
   describe('Notifications', () => {
+    it('ne traite pas deux fois une notification déclenchée simultanément', async () => {
+      await declareOne();
+      const log = notificationModel.docs[0];
+      log.status = 'PENDING';
+      log.attempts = 0;
+      email.sendMail.mockClear();
+      const results = await Promise.all([
+        notifications.dispatch(String(log._id)),
+        notifications.dispatch(String(log._id)),
+      ]);
+      expect(results.filter((result) => result.sent)).toHaveLength(1);
+      expect(email.sendMail).toHaveBeenCalledTimes(1);
+    });
+
     it('ne renvoie pas d’email en double et permet un retry après échec SMTP', async () => {
       await declare(employee);
       const logId = String(notificationModel.docs[0]._id);

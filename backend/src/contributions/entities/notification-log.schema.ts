@@ -18,6 +18,9 @@ export class NotificationLog {
   @Prop({ required: true })
   referenceId: string;
 
+  @Prop()
+  idempotencyKey?: string;
+
   @Prop({ type: Object, required: true })
   recipients: NotificationRecipients;
 
@@ -63,3 +66,4 @@ export const NotificationLogSchema =
 NotificationLogSchema.index({ status: 1, createdAt: 1 });
 NotificationLogSchema.index({ referenceId: 1 });
 NotificationLogSchema.index({ eventType: 1, createdAt: -1 });
+NotificationLogSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });

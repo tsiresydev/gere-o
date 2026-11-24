@@ -170,11 +170,11 @@ export function CashJournalPage() {
                 {notifications.map((log) => (
                   <tr key={log.id}>
                     <td>{log.createdAt?.slice(0, 10)}</td>
-                    <td>{log.eventType === 'CONTRIBUTION_DECLAREE' ? 'Déclaration' : 'Dépense'}</td>
+                    <td>{log.eventType === 'CONTRIBUTION_DECLAREE' ? 'Déclaration' : log.eventType === 'RAPPEL_COTISATION' ? 'Rappel de cotisation' : 'Dépense'}</td>
                     <td>{log.subject}</td>
                     <td>{log.attempts}</td>
                     <td><span className={`finance-status ${log.status === 'SENT' ? 'finance-status--valide' : log.status === 'FAILED' ? 'finance-status--refuse' : 'finance-status--attente'}`}>{log.status}</span></td>
-                    <td>{log.status !== 'SENT' && <button type="button" className="button button--ghost button--small" onClick={() => retry(log.id)}>Réessayer</button>}</td>
+                    <td>{log.status !== 'SENT' && log.eventType !== 'RAPPEL_COTISATION' && <button type="button" className="button button--ghost button--small" onClick={() => retry(log.id)}>Réessayer</button>}</td>
                   </tr>
                 ))}
               </tbody>

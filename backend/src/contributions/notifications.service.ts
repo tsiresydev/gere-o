@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -67,7 +68,7 @@ export class NotificationsService implements OnModuleInit {
     // Un envoi interrompu par un redémarrage est marqué FAILED puis relancé.
     void this.model
       .updateMany(
-        { status: NotificationStatus.PROCESSING },
+        { status: NotificationStatus.PROCESSING, lastAttemptAt: { $lt: new Date(Date.now() - 15 * 60_000) } },
         { $set: { status: NotificationStatus.FAILED } },
       )
       .exec()
@@ -149,6 +150,9 @@ export class NotificationsService implements OnModuleInit {
     if (log.status === NotificationStatus.SENT) {
       return { sent: false, skipped: 'Déjà envoyée' };
     }
+    if (log.status === NotificationStatus.PROCESSING) {
+      return { sent: false, skipped: 'Déjà en cours de traitement' };
+    }
     if (
       log.status === NotificationStatus.FAILED &&
       log.attempts >= NOTIFICATION_MAX_ATTEMPTS
@@ -156,14 +160,17 @@ export class NotificationsService implements OnModuleInit {
       return { sent: false, skipped: 'Nombre maximum de tentatives atteint' };
     }
 
-    await this.model
-      .findByIdAndUpdate(log._id, {
+    const claimed = await this.model
+      .findOneAndUpdate({ _id: log._id, status: log.status, attempts: log.attempts }, {
         $set: {
           status: NotificationStatus.PROCESSING,
           lastAttemptAt: new Date(),
         },
-      })
+      }, { new: true })
       .exec();
+    if (!claimed) {
+      return { sent: false, skipped: 'Déjà en cours de traitement' };
+    }
 
     try {
       const from = this.emailService.getFrom();
@@ -212,12 +219,22 @@ export class NotificationsService implements OnModuleInit {
   }
 
   async retry(id: string): Promise<{ sent: boolean; skipped?: string }> {
+    const log = await this.model.findById(id).exec();
+    if (!log) throw new NotFoundException('Notification introuvable');
+    if (log.eventType === NotificationEvent.RAPPEL_COTISATION) {
+      throw new BadRequestException('Les rappels sont réessayés automatiquement après vérification des cotisations');
+    }
     return this.dispatch(id);
   }
 
   async processPending(): Promise<void> {
+    await this.model.updateMany(
+      { status: NotificationStatus.PROCESSING, lastAttemptAt: { $lt: new Date(Date.now() - 15 * 60_000) } },
+      { $set: { status: NotificationStatus.FAILED } },
+    ).exec();
     const pending = await this.model
       .find({
+        eventType: { $ne: NotificationEvent.RAPPEL_COTISATION },
         $or: [
           { status: NotificationStatus.PENDING },
           {

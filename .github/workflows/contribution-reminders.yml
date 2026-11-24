@@ -1,0 +1,23 @@
+name: Rappels de cotisations
+
+on:
+  schedule:
+    # 8 h, 8 h 20 et 8 h 45 à Madagascar (UTC+3).
+    - cron: '0,20,45 5 1-10 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déclencher les rappels
+        env:
+          REMINDER_TRIGGER_SECRET: ${{ secrets.REMINDER_TRIGGER_SECRET }}
+        run: |
+          test -n "$REMINDER_TRIGGER_SECRET" || { echo "Secret REMINDER_TRIGGER_SECRET absent"; exit 1; }
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 10 --max-time 180 \
+            -X POST -H "Authorization: Bearer $REMINDER_TRIGGER_SECRET" \
+            https://gere-o-backend.onrender.com/api/scheduled/contribution-reminders

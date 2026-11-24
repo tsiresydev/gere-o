@@ -95,7 +95,7 @@ export interface ExpenseCategory {
 
 export interface NotificationLog {
   id: string;
-  eventType: 'CONTRIBUTION_DECLAREE' | 'DEPENSE_ENREGISTREE';
+  eventType: 'CONTRIBUTION_DECLAREE' | 'DEPENSE_ENREGISTREE' | 'RAPPEL_COTISATION';
   referenceId: string;
   recipients: { to: string[]; cc: string[] };
   subject: string;
