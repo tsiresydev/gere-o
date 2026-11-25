@@ -121,17 +121,25 @@ export function ContributionsPage() {
     if (!decision || (decision.reject && !reason.trim())) return;
     const { group, reject } = decision;
     setDeciding(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30000);
     try {
       if (reject) await contributionsService.reject(group[0].id, reason.trim());
-      else await contributionsService.validate(group[0].id);
-      notify({ type: 'success', text: reject ? 'Déclaration refusée.' : 'Déclaration validée.' });
+      else await contributionsService.validate(group[0].id, controller.signal);
+      notify({ type: 'success', text: reject ? 'Déclaration refusée.' : 'Cotisation validée. Envoi du mail en cours ; consultez le journal des notifications.' });
       setDecision(null);
       setReason('');
-      await load();
+      void load();
     } catch (err) {
-      notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Décision impossible.' });
-      await load();
-    } finally { setDeciding(false); }
+      const uncertain = !reject && (!(err instanceof ApiError) || err.status >= 500);
+      if (uncertain) {
+        setDecision(null);
+        notify({ type: 'error', text: 'Réponse non confirmée. Vérifiez le statut et le journal de caisse avant toute nouvelle validation.' });
+      } else {
+        notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Décision impossible.' });
+      }
+      void load();
+    } finally { window.clearTimeout(timeout); setDeciding(false); }
   };
 
   const selectedMemberId = form.memberId || member?.id || '';

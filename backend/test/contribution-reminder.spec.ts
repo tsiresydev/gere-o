@@ -71,13 +71,23 @@ describe('Rappels de cotisations', () => {
   it('refuse un déclencheur non configuré ou sans secret valide', () => {
     const run = jest.fn();
     const secret = 'x'.repeat(32);
-    const controller = new ReminderController({ run } as never, { get: () => secret } as never);
+    const controller = new ReminderController({ run } as never, { get: () => secret } as never, {} as never);
     expect(() => controller.run()).toThrow();
     expect(() => controller.run('Bearer incorrect')).toThrow();
     expect(run).not.toHaveBeenCalled();
     controller.run(`Bearer ${secret}`);
     expect(run).toHaveBeenCalledTimes(1);
-    const unconfigured = new ReminderController({ run } as never, { get: () => '' } as never);
+    const unconfigured = new ReminderController({ run } as never, { get: () => '' } as never, {} as never);
     expect(() => unconfigured.run()).toThrow();
+  });
+
+  it('protège le réveil externe des notifications', () => {
+    const secret = 'x'.repeat(32);
+    const processPending = jest.fn().mockResolvedValue(undefined);
+    const controller = new ReminderController({} as never, { get: () => secret } as never, { processPending } as never);
+    expect(() => controller.processNotifications('Bearer incorrect')).toThrow();
+    expect(processPending).not.toHaveBeenCalled();
+    expect(controller.processNotifications(`Bearer ${secret}`)).toEqual({ accepted: true });
+    expect(processPending).toHaveBeenCalledTimes(1);
   });
 });

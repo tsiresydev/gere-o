@@ -1,0 +1,22 @@
+name: Reprise des notifications
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Relancer le traitement des notifications
+        env:
+          REMINDER_TRIGGER_SECRET: ${{ secrets.REMINDER_TRIGGER_SECRET }}
+        run: |
+          test -n "$REMINDER_TRIGGER_SECRET" || { echo "Secret REMINDER_TRIGGER_SECRET absent"; exit 1; }
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 10 --max-time 180 \
+            -X POST -H "Authorization: Bearer $REMINDER_TRIGGER_SECRET" \
+            https://gere-o-backend.onrender.com/api/scheduled/notifications

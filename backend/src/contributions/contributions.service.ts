@@ -640,11 +640,12 @@ export class ContributionsService {
       if (!updated) throw new ConflictException('Déclaration introuvable');
       const member = await this.memberModel.findById(current.memberId).session(session).exec();
       if (!member) throw new NotFoundException('Membre introuvable');
-      const email = this.notifications.buildContributionEmail(member.name, items.map((item) => item.periodMonth), current.periodYear, items.reduce((sum, item) => sum + item.declaredAmount, 0), balance);
+      const email = this.notifications.buildContributionEmail(member.name, items.map((item) => item.periodMonth), current.periodYear, items.reduce((sum, item) => sum + item.declaredAmount, 0), balance, this.fullName(user));
       const log = await this.notifications.enqueue({ eventType: NotificationEvent.CONTRIBUTION_DECLAREE, referenceId: current.declarationGroupId, primaryTo: member.email, subject: email.subject, html: email.html, createdBy: new Types.ObjectId(user.id) }, session);
       return { row: this.toRow(updated), logId: log._id.toString() };
     });
-    await this.notifications.dispatch(result.logId);
+    // La transaction et le journal sont déjà enregistrés : SMTP ne doit pas bloquer la réponse.
+    void this.notifications.dispatch(result.logId).catch(() => undefined);
     return result.row;
   }
 

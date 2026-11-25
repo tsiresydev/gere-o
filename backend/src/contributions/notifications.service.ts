@@ -256,6 +256,7 @@ export class NotificationsService implements OnModuleInit {
     year: number,
     amount: number,
     balance: number,
+    validatorName: string,
   ): { subject: string; html: string } {
     const period = formatMonthList(months, year);
     return {
@@ -268,6 +269,7 @@ export class NotificationsService implements OnModuleInit {
           <strong>Périodes concernées :</strong> ${escapeHtml(period)}<br>
           <strong>Montant déclaré :</strong> ${formatAr(amount)}<br>
           <strong>Statut :</strong> Validée<br>
+          <strong>Validé par :</strong> ${escapeHtml(validatorName)}<br>
           <strong>Solde de la caisse après cette validation :</strong> ${formatAr(balance)}</p>
           <p>Cordialement,<br>Équipe de gestion de la caisse commune.</p>
         </div>`,

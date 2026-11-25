@@ -101,9 +101,10 @@ export const contributionsService = {
     });
   },
 
-  validate(id: string): Promise<ContributionRow> {
+  validate(id: string, signal?: AbortSignal): Promise<ContributionRow> {
     return api<ContributionRow>(`/contributions/${id}/validate`, {
       method: 'PATCH',
+      signal,
       body: JSON.stringify({}),
     });
   },

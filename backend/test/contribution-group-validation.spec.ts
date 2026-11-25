@@ -41,9 +41,21 @@ describe('Validation groupée des cotisations', () => {
     expect(cash.docs).toHaveLength(2);
     expect(logs.docs).toHaveLength(1);
     expect(logs.docs[0].recipients).toEqual({ to: ['membre@example.com'], cc: [user.email] });
+    expect(logs.docs[0].html).toContain('<strong>Validé par :</strong> Tsiresy');
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(mail.sendMail).toHaveBeenCalledTimes(1);
     await expect(service.validate(result.items[1].id, user)).rejects.toThrow();
     expect(cash.docs).toHaveLength(2);
+  });
+
+  it('répond sans attendre un serveur SMTP bloqué', async () => {
+    mail.sendMail.mockImplementation(() => new Promise(() => undefined));
+    const result = await declare();
+    const validated = await service.validate(result.items[0].id, user);
+    expect(validated.status).toBe('VALIDE');
+    expect(logs.docs).toHaveLength(1);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mail.sendMail).toHaveBeenCalledTimes(1);
   });
 
   it('refuse tout le groupe avec un motif et permet une nouvelle déclaration', async () => {
