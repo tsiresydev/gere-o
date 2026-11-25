@@ -25,6 +25,14 @@ const initialForm = (memberId = ''): DeclarationForm => ({
 
 export function ContributionsPage() {
   const { isValidator, member, members, loading: accessLoading } = useFinanceAccess();
+  const canDeclare = isValidator && member?.email.toLowerCase() === 'tsiresy.madasoftware@gmail.com';
+  const canDecide = isValidator && ['tsiresy.madasoftware@gmail.com', 'mahefa.madasoftware@gmail.com'].includes(member?.email.toLowerCase() ?? '');
+  const [pendingRows, setPendingRows] = useState<ContributionRow[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const [decision, setDecision] = useState<{ group: ContributionRow[]; reject: boolean } | null>(null);
+  const [reason, setReason] = useState('');
+  const decisionRef = useRef<HTMLDialogElement>(null);
   const { notice, notify, clear } = useToast();
   const [rows, setRows] = useState<ContributionRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -55,18 +63,23 @@ export function ContributionsPage() {
           contributionsService.list({ ...filters, page: index + 2, limit: 100 }),
         ),
       );
+      const pending = canDecide ? await contributionsService.pendingDeclarations() : [];
       if (request !== requestRef.current) return;
       setRows([first, ...remaining].flatMap((page) => page.items));
       setTotal(first.total);
+      setPendingRows(pending);
+      setLoadError(false);
     } catch (err) {
       if (request !== requestRef.current) return;
       setRows([]);
       setTotal(0);
+      setPendingRows([]);
+      setLoadError(true);
       notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Impossible de charger les cotisations.' });
     } finally {
       if (request === requestRef.current) setLoading(false);
     }
-  }, [filters, notify]);
+  }, [filters, notify, canDecide]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -81,6 +94,12 @@ export function ContributionsPage() {
     if (!detailId && dialog?.open) dialog.close();
   }, [detailId]);
 
+  useEffect(() => {
+    const dialog = decisionRef.current;
+    if (decision && dialog && !dialog.open) dialog.showModal();
+    if (!decision && dialog?.open) dialog.close();
+  }, [decision]);
+
   const groups = Array.from(rows.reduce((map, row) => {
     const group = map.get(row.memberId) ?? { id: row.memberId, name: row.memberName, email: row.memberEmail, rows: [] as ContributionRow[] };
     group.rows.push(row);
@@ -89,6 +108,31 @@ export function ContributionsPage() {
   }, new Map<string, { id: string; name: string; email: string; rows: ContributionRow[] }>()).values())
     .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   const detail = groups.find((group) => group.id === detailId);
+  const pendingGroups = Array.from(pendingRows.reduce((map, row) => {
+    const key = row.declarationGroupId || row.id;
+    const items = map.get(key) ?? [];
+    items.push(row);
+    map.set(key, items);
+    return map;
+  }, new Map<string, ContributionRow[]>()).values());
+
+  const decide = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    if (!decision || (decision.reject && !reason.trim())) return;
+    const { group, reject } = decision;
+    setDeciding(true);
+    try {
+      if (reject) await contributionsService.reject(group[0].id, reason.trim());
+      else await contributionsService.validate(group[0].id);
+      notify({ type: 'success', text: reject ? 'Déclaration refusée.' : 'Déclaration validée.' });
+      setDecision(null);
+      setReason('');
+      await load();
+    } catch (err) {
+      notify({ type: 'error', text: err instanceof ApiError ? err.message : 'Décision impossible.' });
+      await load();
+    } finally { setDeciding(false); }
+  };
 
   const selectedMemberId = form.memberId || member?.id || '';
   const availabilityKey = `${selectedMemberId}:${form.year}:${availabilityRevision}`;
@@ -146,7 +190,7 @@ export function ContributionsPage() {
         year: form.year,
         paymentDate: form.paymentDate,
       });
-      notify({ type: 'success', text: `${form.months.length} cotisation(s) déclarée(s) et validée(s) automatiquement.` });
+      notify({ type: 'success', text: `${form.months.length} cotisation(s) en attente de validation.` });
       setFormOpen(false);
       await load();
     } catch (err) {
@@ -167,7 +211,7 @@ export function ContributionsPage() {
           <h1>Suivi des cotisations</h1>
           <p className="page-header__subtitle">Consultez les cotisations par membre depuis janvier 2026.</p>
         </div>
-        <button type="button" className="button button--primary" onClick={openForm} disabled={accessLoading || !member}>Déclarer un paiement</button>
+        {canDeclare && <button type="button" className="button button--primary" onClick={openForm} disabled={accessLoading}>Déclarer un paiement</button>}
       </header>
 
       <form className="card finance-filters" onSubmit={applyFilters}>
@@ -192,7 +236,7 @@ export function ContributionsPage() {
         <label className="field"><span className="field__label">Statut</span>
           <select className="input" value={filters.status ?? ''} onChange={(event) => setFilters((p) => ({ ...p, status: (event.target.value || undefined) as ContributionStatus | undefined, page: 1 }))}>
             <option value="">Tous</option>
-            {(['NON_PAYE', 'VALIDE', 'EN_RETARD'] as const).map((value) => <option key={value} value={value}>{CONTRIBUTION_STATUS_LABELS[value]}</option>)}
+          {(['NON_PAYE', 'VALIDE', 'EN_RETARD', 'EN_ATTENTE_DE_VALIDATION', 'REFUSE'] as const).map((value) => <option key={value} value={value}>{CONTRIBUTION_STATUS_LABELS[value]}</option>)}
           </select>
         </label>
         <label className="field"><span className="field__label">Recherche</span>
@@ -201,22 +245,41 @@ export function ContributionsPage() {
         <button type="submit" className="button button--ghost">Filtrer</button>
       </form>
 
+      {canDecide && <section className="card table-card">
+        <div className="section-head"><h2 className="section-head__title">Déclarations en attente</h2></div>
+        {loading ? <p className="finance-empty-inline" role="status">Chargement des déclarations…</p> : loadError ? <p className="finance-empty-inline" role="alert">Impossible de charger les déclarations. <button type="button" className="button button--ghost button--small" onClick={() => void load()}>Réessayer</button></p> : pendingGroups.length === 0 ? <p className="finance-empty-inline">Aucune déclaration en attente.</p> : <div className="table-wrap"><table className="data-table mobile-card-table"><thead><tr><th>Membre</th><th>Mois</th><th>Montant</th><th>Actions</th></tr></thead><tbody>
+          {pendingGroups.map((group) => <tr key={group[0].declarationGroupId || group[0].id}><td data-label="Membre">{group[0].memberName}</td><td data-label="Mois">{group.map((row) => row.monthLabel).join(', ')}</td><td data-label="Montant">{formatAr(group.reduce((sum, row) => sum + row.declaredAmount, 0))}</td><td data-label="Actions"><div className="decision-actions"><button type="button" className="button button--primary button--small" disabled={deciding} onClick={() => { setReason(''); setDecision({ group, reject: false }); }}>Valider</button><button type="button" className="button button--ghost button--small" disabled={deciding} onClick={() => { setReason(''); setDecision({ group, reject: true }); }}>Refuser</button></div></td></tr>)}
+        </tbody></table></div>}
+      </section>}
+
+      <dialog ref={decisionRef} className="modal decision-dialog" aria-labelledby="decision-title" onCancel={(event) => { if (deciding) event.preventDefault(); }} onClose={() => setDecision(null)}>
+        {decision && <form onSubmit={(event) => void decide(event)}>
+          <div className="modal__header"><h2 className="modal__title" id="decision-title">{decision.reject ? 'Refuser la déclaration' : 'Valider la déclaration'}</h2><button type="button" className="modal__close" disabled={deciding} onClick={() => setDecision(null)} aria-label="Fermer">×</button></div>
+          <div className="modal__body">
+            <p><strong>{decision.group[0].memberName}</strong> · {formatAr(decision.group.reduce((sum, row) => sum + row.declaredAmount, 0))}</p>
+            <p>{decision.group.map((row) => row.monthLabel).join(', ')}</p>
+            {decision.reject ? <><p className="modal__hint">Tous les mois de cette déclaration seront refusés et pourront être déclarés à nouveau.</p><label className="field"><span className="field__label">Motif du refus</span><textarea className="input decision-reason" value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={500} placeholder="Indiquez la raison du refus" /></label></> : <p className="modal__hint">Tous les mois seront validés, comptabilisés et feront l’objet d’un seul mail récapitulatif.</p>}
+          </div>
+          <div className="modal__footer"><button type="button" className="button button--ghost" disabled={deciding} onClick={() => setDecision(null)}>Annuler</button><button type="submit" className="button button--primary" disabled={deciding || (decision.reject && !reason.trim())}>{deciding ? 'Traitement…' : decision.reject ? 'Confirmer le refus' : 'Confirmer la validation'}</button></div>
+        </form>}
+      </dialog>
+
       <section className="card table-card">
         <div className="section-head"><div><h2 className="section-head__title">Cotisations par membre</h2><p className="section-head__subtitle">{groups.length} membre(s) · {total} période(s) correspondant aux filtres</p></div></div>
         {loading ? <p className="finance-empty-inline">Chargement…</p> : rows.length === 0 ? (
           <EmptyFinance title="Aucune cotisation trouvée" hint="Modifiez les filtres ou déclarez un paiement." />
         ) : (
             <div className="table-wrap">
-              <table className="data-table finance-table">
+              <table className="data-table finance-table mobile-card-table">
                 <thead><tr><th>Membre</th><th>Périodes</th><th>Payées</th><th>En retard</th><th>Détail</th></tr></thead>
                 <tbody>
                   {groups.map((group) => (
                     <tr key={group.id}>
-                      <td><strong>{group.name}</strong><br /><span className="card__note">{group.email}</span></td>
-                      <td>{group.rows.length}</td>
-                      <td>{group.rows.filter((row) => row.status === 'VALIDE').length}</td>
-                      <td>{group.rows.filter((row) => row.status === 'EN_RETARD').length}</td>
-                      <td><button type="button" className="button button--ghost button--small" onClick={() => setDetailId(group.id)} aria-label={`Voir les cotisations de ${group.name}`}>Voir les mois</button></td>
+                      <td data-label="Membre"><span><strong>{group.name}</strong><br /><span className="card__note">{group.email}</span></span></td>
+                      <td data-label="Périodes">{group.rows.length}</td>
+                      <td data-label="Payées">{group.rows.filter((row) => row.status === 'VALIDE').length}</td>
+                      <td data-label="En retard">{group.rows.filter((row) => row.status === 'EN_RETARD').length}</td>
+                      <td data-label="Détail"><button type="button" className="button button--ghost button--small" onClick={() => setDetailId(group.id)} aria-label={`Voir les cotisations de ${group.name}`}>Voir les mois</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -271,7 +334,7 @@ export function ContributionsPage() {
                 <label className="field"><span className="field__label">Année</span><input className="input" type="number" min={2026} value={form.year} onChange={(event) => setForm((p) => ({ ...p, year: Number(event.target.value), months: [] }))} /></label>
                 <label className="field"><span className="field__label">Date du paiement</span><input className="input" type="date" value={form.paymentDate} onChange={(event) => setForm((p) => ({ ...p, paymentDate: event.target.value }))} /></label>
               </div>
-              <p className="modal__hint">Les mois sélectionnés seront validés et comptabilisés immédiatement.</p>
+              <p className="modal__hint">La déclaration restera en attente avant validation et comptabilisation.</p>
               <div className="finance-total"><span>Montant calculé automatiquement</span><strong>{formatAr(form.months.length * 5000)}</strong></div>
             </div>
             <div className="modal__footer"><button type="button" className="button button--ghost" onClick={() => setFormOpen(false)}>Annuler</button><button type="submit" className="button button--primary" disabled={saving || !availabilityReady || Boolean(availabilityError)}>{saving ? 'Envoi…' : 'Déclarer'}</button></div>

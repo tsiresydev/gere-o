@@ -457,6 +457,10 @@ export class ContributionsService {
     dto: DeclareContributionDto,
     user: AuthUser,
   ): Promise<{ items: ContributionRow[]; groupId: string }> {
+    if (user.email.toLowerCase() !== 'tsiresy.madasoftware@gmail.com') {
+      throw new ForbiddenException('La saisie des cotisations est réservée à Tsiresy');
+    }
+    await this.assertValidator(user);
     const member = await this.resolveMember(dto.memberId, user);
     const months = [...new Set(dto.months)].sort((a, b) => a - b);
     const uniqueKeys = months.map((month) =>
@@ -475,7 +479,6 @@ export class ContributionsService {
     }
 
     const groupId = new Types.ObjectId().toString();
-    const total = months.length * CONTRIBUTION_MONTHLY_AMOUNT;
     const paymentDate = new Date(`${dto.paymentDate}T00:00:00.000Z`);
     const declaredAt = new Date();
     const docs = months.map(
@@ -488,61 +491,20 @@ export class ContributionsService {
           declaredAmount: CONTRIBUTION_MONTHLY_AMOUNT,
           paymentDate,
           paymentMethod: dto.paymentMethod,
-          status: ContributionStatus.VALIDE,
+          status: ContributionStatus.EN_ATTENTE_DE_VALIDATION,
           uniqueKey: keyOf(member._id, { year: dto.year, month }),
           declaredBy: new Types.ObjectId(user.id),
           declaredAt,
-          validatedAt: declaredAt,
-          validatedAmount: CONTRIBUTION_MONTHLY_AMOUNT,
           declarationGroupId: groupId,
           notes: dto.notes,
         }) as Contribution,
     );
 
     let created: ContributionDocument[];
-    let logId: string;
     try {
-      const result = await this.ledger.runInTransaction(async (session) => {
-        const inserted = await this.contributionModel.create(docs, { session, ordered: true });
-        let balance = await this.ledger.getBalance(session);
-        for (const contribution of inserted) {
-          balance += contribution.declaredAmount;
-          await this.ledger.createEntry(
-            {
-              type: CashTransactionType.CONTRIBUTION_VALIDEE,
-              direction: CashDirection.IN,
-              amount: contribution.declaredAmount,
-              description: `Cotisation validée automatiquement — ${FRENCH_MONTHS[contribution.periodMonth - 1]} ${contribution.periodYear}`,
-              createdBy: new Types.ObjectId(user.id),
-              createdByName: this.fullName(user),
-              contributionId: contribution._id,
-              balanceAfter: balance,
-            },
-            session,
-          );
-        }
-        const email = this.notifications.buildContributionEmail(
-          member.name,
-          months,
-          dto.year,
-          total,
-          balance,
-        );
-        const log = await this.notifications.enqueue(
-          {
-            eventType: NotificationEvent.CONTRIBUTION_DECLAREE,
-            referenceId: groupId,
-            primaryTo: member.email,
-            subject: email.subject,
-            html: email.html,
-            createdBy: new Types.ObjectId(user.id),
-          },
-          session,
-        );
-        return { inserted, logId: log._id.toString() };
-      });
-      created = result.inserted;
-      logId = result.logId;
+      created = await this.ledger.runInRequiredTransaction((session) =>
+        this.contributionModel.create(docs, { session, ordered: true }),
+      );
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -551,8 +513,6 @@ export class ContributionsService {
       }
       throw error;
     }
-
-    await this.notifications.dispatch(logId);
 
     return {
       items: created.map((item) => this.toRow(item)),
@@ -635,52 +595,57 @@ export class ContributionsService {
     });
   }
 
+  async listPendingDeclarations(user: AuthUser): Promise<ContributionRow[]> {
+    await this.assertValidator(user);
+    if (!['tsiresy.madasoftware@gmail.com', 'mahefa.madasoftware@gmail.com'].includes(user.email.toLowerCase())) throw new ForbiddenException('Accès réservé à Tsiresy ou Mahefa');
+    const items = await this.contributionModel.find({ status: ContributionStatus.EN_ATTENTE_DE_VALIDATION }).exec();
+    const members = await this.memberModel.find({ _id: { $in: items.map((item) => item.memberId) } }).exec();
+    const byId = new Map(members.map((member) => [String(member._id), member]));
+    return items.map((item) => ({ ...this.toRow(item), memberName: byId.get(String(item.memberId))?.name ?? 'Membre inconnu', memberEmail: byId.get(String(item.memberId))?.email ?? '' }));
+  }
+
   async validate(id: string, user: AuthUser): Promise<ContributionRow> {
     await this.assertValidator(user);
-    return this.ledger.runInTransaction(async (session) => {
-      const findQuery = this.contributionModel.findById(id);
-      if (session) findQuery.session(session);
-      const current = await findQuery.exec();
+    if (!['tsiresy.madasoftware@gmail.com', 'mahefa.madasoftware@gmail.com'].includes(user.email.toLowerCase())) throw new ForbiddenException('Validation réservée à Tsiresy ou Mahefa');
+    const result = await this.ledger.runInRequiredTransaction(async (session) => {
+      const current = await this.contributionModel.findById(id).session(session).exec();
       if (!current) throw new NotFoundException('Cotisation introuvable');
       if (current.status !== ContributionStatus.EN_ATTENTE_DE_VALIDATION) {
         throw new ConflictException('Cette déclaration ne peut plus être validée');
       }
-
-      const updateQuery = this.contributionModel.findOneAndUpdate(
-        { _id: id, status: ContributionStatus.EN_ATTENTE_DE_VALIDATION },
-        {
-          $set: {
-            status: ContributionStatus.VALIDE,
-            validatedBy: new Types.ObjectId(user.id),
-            validatedAt: new Date(),
-            validatedAmount: current.declaredAmount,
-          },
-        },
-        { new: true },
-      );
-      if (session) updateQuery.session(session);
-      const updated = await updateQuery.exec();
-      if (!updated) {
+      const items = await this.contributionModel.find({ declarationGroupId: current.declarationGroupId }).session(session).exec();
+      if (!items.length || items.some((item) => item.status !== ContributionStatus.EN_ATTENTE_DE_VALIDATION)) {
         throw new ConflictException('Cette déclaration a déjà été traitée');
       }
-
-      const balance = await this.ledger.getBalance(session);
-      const balanceAfter = balance + current.declaredAmount;
-      await this.ledger.createEntry(
-        {
-          type: CashTransactionType.CONTRIBUTION_VALIDEE,
-          direction: CashDirection.IN,
-          amount: current.declaredAmount,
-          description: `Cotisation validée — ${FRENCH_MONTHS[current.periodMonth - 1]} ${current.periodYear}`,
-          createdBy: new Types.ObjectId(user.id),
-          createdByName: this.fullName(user),
-          contributionId: current._id,
-          balanceAfter,
-        },
-        session,
-      );
-      return this.toRow(updated);
+      let balance = await this.ledger.getBalance(session);
+      const validatedAt = new Date();
+      let updated: ContributionDocument | null = null;
+      for (const item of items) {
+        const row = await this.contributionModel.findOneAndUpdate(
+          { _id: item._id, status: ContributionStatus.EN_ATTENTE_DE_VALIDATION },
+          { $set: { status: ContributionStatus.VALIDE, validatedBy: new Types.ObjectId(user.id), validatedAt, validatedAmount: item.declaredAmount } },
+          { new: true, session },
+        ).exec();
+        if (!row) throw new ConflictException('Cette déclaration a déjà été traitée');
+        if (String(item._id) === id) updated = row;
+        balance += item.declaredAmount;
+        await this.ledger.createEntry({
+          type: CashTransactionType.CONTRIBUTION_VALIDEE, direction: CashDirection.IN,
+          amount: item.declaredAmount,
+          description: `Cotisation validée — ${FRENCH_MONTHS[item.periodMonth - 1]} ${item.periodYear}`,
+          createdBy: new Types.ObjectId(user.id), createdByName: this.fullName(user),
+          contributionId: item._id, balanceAfter: balance,
+        }, session);
+      }
+      if (!updated) throw new ConflictException('Déclaration introuvable');
+      const member = await this.memberModel.findById(current.memberId).session(session).exec();
+      if (!member) throw new NotFoundException('Membre introuvable');
+      const email = this.notifications.buildContributionEmail(member.name, items.map((item) => item.periodMonth), current.periodYear, items.reduce((sum, item) => sum + item.declaredAmount, 0), balance);
+      const log = await this.notifications.enqueue({ eventType: NotificationEvent.CONTRIBUTION_DECLAREE, referenceId: current.declarationGroupId, primaryTo: member.email, subject: email.subject, html: email.html, createdBy: new Types.ObjectId(user.id) }, session);
+      return { row: this.toRow(updated), logId: log._id.toString() };
     });
+    await this.notifications.dispatch(result.logId);
+    return result.row;
   }
 
   async reject(
@@ -689,27 +654,28 @@ export class ContributionsService {
     user: AuthUser,
   ): Promise<ContributionRow> {
     await this.assertValidator(user);
-    const updated = await this.contributionModel
-      .findOneAndUpdate(
-        { _id: id, status: ContributionStatus.EN_ATTENTE_DE_VALIDATION },
-        {
-          $set: {
-            status: ContributionStatus.REFUSE,
-            rejectedBy: new Types.ObjectId(user.id),
-            rejectedAt: new Date(),
-            rejectionReason: dto.reason,
-          },
-          $unset: { uniqueKey: 1 },
-        },
-        { new: true },
-      )
-      .exec();
-    if (!updated) {
-      const exists = await this.contributionModel.findById(id).exec();
-      if (!exists) throw new NotFoundException('Cotisation introuvable');
-      throw new ConflictException('Cette déclaration a déjà été traitée');
-    }
-    return this.toRow(updated);
+    if (!['tsiresy.madasoftware@gmail.com', 'mahefa.madasoftware@gmail.com'].includes(user.email.toLowerCase())) throw new ForbiddenException('Refus réservé à Tsiresy ou Mahefa');
+    const reason = dto.reason?.trim();
+    if (!reason) throw new BadRequestException('Le motif du refus est obligatoire');
+    return this.ledger.runInRequiredTransaction(async (session) => {
+      const current = await this.contributionModel.findById(id).session(session).exec();
+      if (!current) throw new NotFoundException('Cotisation introuvable');
+      const items = await this.contributionModel.find({ declarationGroupId: current.declarationGroupId }).session(session).exec();
+      if (!items.length || items.some((item) => item.status !== ContributionStatus.EN_ATTENTE_DE_VALIDATION)) throw new ConflictException('Cette déclaration a déjà été traitée');
+      let updated: ContributionDocument | null = null;
+      const rejectedAt = new Date();
+      for (const item of items) {
+        const row = await this.contributionModel.findOneAndUpdate(
+          { _id: item._id, status: ContributionStatus.EN_ATTENTE_DE_VALIDATION },
+          { $set: { status: ContributionStatus.REFUSE, rejectedBy: new Types.ObjectId(user.id), rejectedAt, rejectionReason: reason }, $unset: { uniqueKey: 1 } },
+          { new: true, session },
+        ).exec();
+        if (!row) throw new ConflictException('Cette déclaration a déjà été traitée');
+        if (String(item._id) === id) updated = row;
+      }
+      if (!updated) throw new ConflictException('Déclaration introuvable');
+      return this.toRow(updated);
+    });
   }
 
   async getOverview(query: {

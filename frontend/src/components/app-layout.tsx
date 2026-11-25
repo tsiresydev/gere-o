@@ -149,8 +149,22 @@ export function AppLayout() {
 
   useEffect(() => {
     if (!menuOpen) return;
+    const sidebar = document.getElementById('app-sidebar');
+    const toggle = document.querySelector<HTMLButtonElement>('.app-menu-toggle');
+    const focusable = () => Array.from(sidebar?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)') ?? []);
+    focusable()[0]?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false);
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        toggle?.focus();
+      }
+      if (event.key === 'Tab') {
+        const elements = focusable();
+        const first = elements[0];
+        const last = elements[elements.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -210,12 +224,11 @@ export function AppLayout() {
                     <span className="sidebar-link__label">{item.label}</span>
                   </button>
                   {financeOpen && (
-                    <div className="sidebar-flyout" role="menu" aria-label="Sous-menu Cotisations">
+                    <div className="sidebar-flyout" aria-label="Sous-menu Cotisations">
                       {item.subItems.map((sub) => (
                         <Link
                           key={sub.to}
                           to={sub.to}
-                          role="menuitem"
                           className={`sidebar-flyout__link ${location.pathname === sub.to ? 'is-current' : ''}`}
                           onClick={closeMenu}
                         >

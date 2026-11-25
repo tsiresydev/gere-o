@@ -131,6 +131,12 @@ export class ContributionsController {
     return this.contributionsService.declare(dto, user);
   }
 
+  @Get('pending-declarations')
+  @UseGuards(ContributionValidatorGuard)
+  listPendingDeclarations(@CurrentUser() user: AuthUser) {
+    return this.contributionsService.listPendingDeclarations(user);
+  }
+
   @Patch(':id/validate')
   @UseGuards(ContributionValidatorGuard)
   validate(@Param('id') id: string, @CurrentUser() user: AuthUser) {

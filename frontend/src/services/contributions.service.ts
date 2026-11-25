@@ -87,6 +87,10 @@ export const contributionsService = {
     return api<Page<ContributionRow>>(`/contributions/me${toQuery(filters)}`);
   },
 
+  pendingDeclarations(): Promise<ContributionRow[]> {
+    return api<ContributionRow[]>('/contributions/pending-declarations');
+  },
+
   declare(input: DeclareContributionInput): Promise<{
     items: ContributionRow[];
     groupId: string;
