@@ -40,6 +40,7 @@ export function ContributionsPage() {
   const [filters, setFilters] = useState<ContributionFilters>({ page: 1, limit: 100, year: new Date().getFullYear() });
   const [search, setSearch] = useState('');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailPage, setDetailPage] = useState(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const requestRef = useRef(0);
   const [form, setForm] = useState<DeclarationForm>(() => initialForm());
@@ -108,6 +109,10 @@ export function ContributionsPage() {
   }, new Map<string, { id: string; name: string; email: string; rows: ContributionRow[] }>()).values())
     .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   const detail = groups.find((group) => group.id === detailId);
+  const detailPageSize = 2;
+  const detailPageCount = Math.max(1, Math.ceil((detail?.rows.length ?? 0) / detailPageSize));
+  const currentDetailPage = Math.min(detailPage, detailPageCount - 1);
+  const mobileDetailRows = detail?.rows.slice(currentDetailPage * detailPageSize, (currentDetailPage + 1) * detailPageSize) ?? [];
   const pendingGroups = Array.from(pendingRows.reduce((map, row) => {
     const key = row.declarationGroupId || row.id;
     const items = map.get(key) ?? [];
@@ -287,7 +292,7 @@ export function ContributionsPage() {
                       <td data-label="Périodes">{group.rows.length}</td>
                       <td data-label="Payées">{group.rows.filter((row) => row.status === 'VALIDE').length}</td>
                       <td data-label="En retard">{group.rows.filter((row) => row.status === 'EN_RETARD').length}</td>
-                      <td data-label="Détail"><button type="button" className="button button--ghost button--small" onClick={() => setDetailId(group.id)} aria-label={`Voir les cotisations de ${group.name}`}>Voir les mois</button></td>
+                      <td data-label="Détail"><button type="button" className="button button--ghost button--small" onClick={() => { setDetailPage(0); setDetailId(group.id); }} aria-label={`Voir les cotisations de ${group.name}`}>Voir les mois</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -299,10 +304,25 @@ export function ContributionsPage() {
       <dialog ref={dialogRef} className="modal contribution-detail-dialog" aria-labelledby="contribution-detail-title" onClose={() => setDetailId(null)}>
         {detail && <>
           <div className="modal__header"><div><h2 className="modal__title" id="contribution-detail-title">Cotisations de {detail.name}</h2><p className="card__note">{detail.email} · {detail.rows.length} période(s) selon les filtres</p></div><button type="button" className="modal__close" onClick={() => dialogRef.current?.close()} aria-label="Fermer">×</button></div>
-          <div className="modal__body">
+          <div className="modal__body contribution-detail-desktop">
             <table className="data-table contribution-detail-table"><thead><tr><th>Période</th><th>Déclaré</th><th>Statut</th><th>Date de paiement</th></tr></thead><tbody>
               {detail.rows.map((row) => <tr key={row.id}><td data-label="Période">{row.monthLabel}</td><td data-label="Déclaré">{row.declaredAmount > 0 ? formatAr(row.declaredAmount) : '—'}</td><td data-label="Statut"><StatusBadge status={row.status} /></td><td data-label="Date de paiement"><span>{row.paymentDate ?? '—'}{row.paymentMethod ? <><br /><span className="card__note">{row.paymentMethod}</span></> : null}</span></td></tr>)}
             </tbody></table>
+          </div>
+          <div className="contribution-detail-mobile">
+            <div className="contribution-month-list" aria-live="polite">
+              {mobileDetailRows.map((row) => <dl className="contribution-month-card" key={row.id}>
+                <div><dt>Période</dt><dd><strong>{row.monthLabel}</strong></dd></div>
+                <div><dt>Déclaré</dt><dd>{row.declaredAmount > 0 ? formatAr(row.declaredAmount) : '—'}</dd></div>
+                <div><dt>Statut</dt><dd><StatusBadge status={row.status} /></dd></div>
+                <div><dt>Date de paiement</dt><dd>{row.paymentDate ?? '—'}{row.paymentMethod ? ` · ${row.paymentMethod}` : ''}</dd></div>
+              </dl>)}
+            </div>
+            {detailPageCount > 1 && <nav className="contribution-month-pagination" aria-label="Pages des cotisations">
+              <button type="button" className="button button--ghost button--small" disabled={currentDetailPage === 0} onClick={() => setDetailPage(currentDetailPage - 1)} aria-label="Mois précédents">Précédent</button>
+              <span aria-live="polite">{currentDetailPage + 1} / {detailPageCount}</span>
+              <button type="button" className="button button--ghost button--small" disabled={currentDetailPage >= detailPageCount - 1} onClick={() => setDetailPage(currentDetailPage + 1)} aria-label="Mois suivants">Suivant</button>
+            </nav>}
           </div>
           <div className="modal__footer"><button type="button" className="button button--primary" onClick={() => dialogRef.current?.close()}>Fermer</button></div>
         </>}
