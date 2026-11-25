@@ -259,16 +259,16 @@ export class NotificationsService implements OnModuleInit {
   ): { subject: string; html: string } {
     const period = formatMonthList(months, year);
     return {
-      subject: `Déclaration de cotisation - ${memberName}`,
+      subject: `Validation de cotisation - ${memberName}`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
           <p>Bonjour,</p>
-          <p>Nous vous informons qu'une déclaration de cotisation vient d'être enregistrée.</p>
+          <p>Nous vous informons qu'une déclaration de cotisation vient d'être validée.</p>
           <p><strong>Membre :</strong> ${escapeHtml(memberName)}<br>
           <strong>Périodes concernées :</strong> ${escapeHtml(period)}<br>
           <strong>Montant déclaré :</strong> ${formatAr(amount)}<br>
-          <strong>Statut :</strong> Validée automatiquement<br>
-          <strong>Solde de la caisse après cette déclaration :</strong> ${formatAr(balance)}</p>
+          <strong>Statut :</strong> Validée<br>
+          <strong>Solde de la caisse après cette validation :</strong> ${formatAr(balance)}</p>
           <p>Cordialement,<br>Équipe de gestion de la caisse commune.</p>
         </div>`,
     };

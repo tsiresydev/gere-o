@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, FilterQuery, Model, Types } from 'mongoose';
@@ -68,6 +69,16 @@ export class CashLedgerService {
     } finally {
       await session.endSession();
     }
+  }
+
+  async runInRequiredTransaction<T>(fn: (session: ClientSession) => Promise<T>): Promise<T> {
+    if (!(await this.supportsTransactions())) {
+      throw new ServiceUnavailableException('Les transactions MongoDB sont nécessaires pour traiter cette déclaration');
+    }
+    return this.runInTransaction((session) => {
+      if (!session) throw new ServiceUnavailableException('Transaction MongoDB indisponible');
+      return fn(session);
+    });
   }
 
   private async supportsTransactions(): Promise<boolean> {
